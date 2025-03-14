@@ -2526,6 +2526,146 @@ static void er_add_slice(H264SliceContext *sl,
     }
 }
 
+#if gly_filter
+static int mv_test(H264SliceContext *sl)
+{
+    //  mv_cache如下所示
+	//  * --+--------------------
+	//  *   | x x x x  x  x  x  x
+	//  *   | x x x x  0  1  4  5
+	//  *   | x x x x  2  3  6  7
+	//  *   | x x x x  8  9 12 13
+	//  *   | x x x x 10 11 14 15
+
+    const int refn = sl->ref_cache[1][scan8[0]];
+    int list = 0;//前向参考帧
+    int mv_ax1,mv_ay1,mv_ax2,mv_ay2,mv_ax3,mv_ay3,mv_ax4,mv_ay4;
+    int mv_bx1,mv_by1,mv_bx2,mv_by2,mv_bx3,mv_by3,mv_bx4,mv_by4;
+    int flag = 1;
+    int m = 2;//mv阈值
+    if (refn >= 0) {//参考帧存在
+        if(sl->mb_x != 0){
+        //当前宏块左侧索引之差
+
+            mv_ax1 = sl->mv_cache[list][scan8[0]][0] - sl->mv_cache[list][scan8[0]-1][0];
+            mv_ay1 = sl->mv_cache[list][scan8[0]][1] - sl->mv_cache[list][scan8[0]-1][1];
+
+            mv_ax2 = sl->mv_cache[list][scan8[2]][0] - sl->mv_cache[list][scan8[2]-1][0];
+            mv_ay2 = sl->mv_cache[list][scan8[2]][1] - sl->mv_cache[list][scan8[2]-1][1];
+        
+            mv_ax3 = sl->mv_cache[list][scan8[8]][0] - sl->mv_cache[list][scan8[8]-1][0];
+            mv_ay3 = sl->mv_cache[list][scan8[8]][1] - sl->mv_cache[list][scan8[8]-1][1];
+
+            mv_ax4 = sl->mv_cache[list][scan8[10]][0] - sl->mv_cache[list][scan8[10]-1][0];
+            mv_ay4 = sl->mv_cache[list][scan8[10]][1] - sl->mv_cache[list][scan8[10]-1][1];
+
+            if(abs(mv_ax1)>m||abs(mv_ax2)>m||abs(mv_ax3)>m||abs(mv_ax4)>m||abs(mv_ay1)>m||abs(mv_ay2)>m||abs(mv_ay3)>m||abs(mv_ay4)>m){
+                flag = -1;
+            }
+        }
+
+        if(sl->mb_y != 0){
+            mv_bx1 = sl->mv_cache[list][scan8[0]][0] - sl->mv_cache[list][scan8[0]-8][0];
+            mv_by1 = sl->mv_cache[list][scan8[0]][1] - sl->mv_cache[list][scan8[0]-8][1];
+
+            mv_bx2 = sl->mv_cache[list][scan8[1]][0] - sl->mv_cache[list][scan8[1]-8][0];
+            mv_by2 = sl->mv_cache[list][scan8[1]][1] - sl->mv_cache[list][scan8[1]-8][1];
+        
+            mv_bx3 = sl->mv_cache[list][scan8[4]][0] - sl->mv_cache[list][scan8[4]-8][0];
+            mv_by3 = sl->mv_cache[list][scan8[4]][1] - sl->mv_cache[list][scan8[4]-8][1];
+
+            mv_bx4 = sl->mv_cache[list][scan8[5]][0] - sl->mv_cache[list][scan8[5]-8][0];
+            mv_by4 = sl->mv_cache[list][scan8[5]][1] - sl->mv_cache[list][scan8[5]-8][1];
+
+            if(abs(mv_bx1)>m||abs(mv_bx2)>m||abs(mv_bx3)>m||abs(mv_bx4)>m||abs(mv_by1)>m||abs(mv_by2)>m||abs(mv_by3)>m||abs(mv_by4)>m){
+                flag = -1;
+            }
+        }
+
+    }
+    
+    return flag;
+}
+#endif
+#if gly_filter
+static int filter_test(const H264Context *h, H264SliceContext *sl)
+{
+    const int mb_x    = sl->mb_x;
+    const int mb_y    = sl->mb_y;
+    int *linesize = h->cur_pic.f->linesize;
+    uint8_t *dest_y;
+
+    int y_diff ;
+    int y_diff_left = 0 ;
+    int y_diff_up = 0;
+
+    int sum_currentx = 0;
+    int sum_currenty = 0;
+    int sum_upx = 0;
+    int sum_lefty = 0;
+
+    int sum_currentx2 = 0;
+    int sum_currenty2 = 0;
+    int sum_upx2 = 0;
+    int sum_lefty2 = 0;
+
+    int flag = 1;
+
+    if(mb_x == 0 && mb_y == 0){//第一个宏块
+        return flag;
+    }
+
+    //当前宏块首像素地址
+    dest_y  = h->cur_pic.f->data[0] + mb_x * 16 + mb_y * 16 * linesize[0];
+    for (int i = 0; i < 16; i++) {
+        sum_currentx += *(dest_y + i);
+        sum_currenty += *(dest_y + i * linesize[0]);
+        sum_currentx2 += (*(dest_y + i))^2;
+        sum_currenty2 += (*(dest_y + i * linesize[0]))^2;
+
+        if (mb_x != 0) { // 如果不是第一列
+            if(*(dest_y + i * linesize[0]) == *(dest_y + i * linesize[0] - 1)){
+                y_diff_left = 0;
+            }else{
+                y_diff_left += abs( (*(dest_y + i * linesize[0]) - *(dest_y + i * linesize[0] - 1)) * 100/(*(dest_y + i * linesize[0] - 1) == 0 ? *(dest_y + i * linesize[0]) : *(dest_y + i * linesize[0] - 1) ) );
+            }
+            sum_lefty += *(dest_y + i * linesize[0] - 1);
+            sum_lefty2 += (*(dest_y + i * linesize[0] - 1))^2;
+        }
+
+        if (mb_y != 0) {//不是第一行
+            if(*(dest_y + i) == *(dest_y - linesize[0]  + i)){
+                y_diff_up = 0;
+            }else{
+                y_diff_up += abs((*(dest_y + i) - *(dest_y - linesize[0]  + i)) * 100 / (*(dest_y - linesize[0]  + i) == 0 ? *(dest_y + i) : *(dest_y - linesize[0]  + i)) );
+            }
+            sum_upx += *(dest_y - linesize[0]  + i);
+            sum_upx2 += (*(dest_y - linesize[0]  + i))^2;
+        }
+    }
+    int current_dx = (sum_currentx2 - sum_currentx^2 / 16)/16;
+    int up_dx = ( sum_upx2 -  sum_upx^2 / 16)/16;
+    int a =abs( (current_dx*100 - up_dx*100)/(up_dx != 0 ? up_dx:1) );
+
+
+    int current_dy = (sum_currenty2 - sum_currenty^2/16)/16;
+    int left_dy = (sum_lefty2 - sum_lefty^2/16)/16;
+    int b =abs( (current_dy*100 - left_dy*100)/(left_dy != 0 ? left_dy:1) );
+
+    y_diff = (y_diff_left + y_diff_up)/32;
+
+    if(y_diff > 2 && (a+b)/2 > 100){//y_diff亮度，
+        flag = -1;
+    }
+
+    return flag;
+}
+#endif
+
+#if gly_erxy
+extern int temp_error_x;
+extern int temp_error_y;
+#endif
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
@@ -2533,6 +2673,14 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     int lf_x_start = sl->mb_x;
     int orig_deblock = sl->deblocking_filter;
     int ret;
+    #if gly_erxy
+
+    
+    int error_flag = 0;
+
+
+    #endif
+
 
     sl->linesize   = h->cur_pic_ptr->f->linesize[0];
     sl->uvlinesize = h->cur_pic_ptr->f->linesize[1];
@@ -2551,6 +2699,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     sl->is_complex = FRAME_MBAFF(h) || h->picture_structure != PICT_FRAME ||
                      (CONFIG_GRAY && (h->flags & AV_CODEC_FLAG_GRAY));
 
+
     if (!(h->avctx->active_thread_type & FF_THREAD_SLICE) && h->picture_structure == PICT_FRAME && sl->er->error_status_table) {
         const int start_i  = av_clip(sl->resync_mb_x + sl->resync_mb_y * h->mb_width, 0, h->mb_num - 1);
         if (start_i) {
@@ -2560,6 +2709,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                 sl->er->error_occurred = 1;
         }
     }
+
 
     if (h->ps.pps->cabac) {
         /* realign */
@@ -2576,6 +2726,8 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
         for (;;) {
             int ret, eos;
+            int ret1 = 1,ret2 = 1;
+            avctx->error_num[sl->mb_x][sl->mb_y] = 0;
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
@@ -2586,19 +2738,72 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
             ret = ff_h264_decode_mb_cabac(h, sl);
 
+         
+
             if (ret >= 0)
                 ff_h264_hl_decode_mb(h, sl);
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
-            if (ret >= 0 && FRAME_MBAFF(h)) {
+            if (ret >= 0 && FRAME_MBAFF(h)) {//////////////////不进入
                 sl->mb_y++;
 
                 ret = ff_h264_decode_mb_cabac(h, sl);
+
+
 
                 if (ret >= 0)
                     ff_h264_hl_decode_mb(h, sl);
                 sl->mb_y--;
             }
+
+
+#if gly_filter
+        if(sl->slice_type == AV_PICTURE_TYPE_P || sl->slice_type == AV_PICTURE_TYPE_I)
+        {
+              ret1 = filter_test(h, sl);
+            if(sl->slice_type == AV_PICTURE_TYPE_P){
+               ret2 =  mv_test(sl);
+            }
+        }
+#endif
+
+            #if gly_erxy
+
+                if(ret<0 || (ret1<0 && ret2<0)){
+                    error_flag = error_flag + 1;
+
+                    
+                    if(error_flag == 80){
+                        if(temp_error_y == -1){  //初始化状态
+                            temp_error_x = sl->mb_x;
+                            temp_error_y = sl->mb_y;
+                        }
+                        if(temp_error_y > sl->mb_y){ //新的错误行更靠前
+                            temp_error_x = sl->mb_x;
+                            temp_error_y = sl->mb_y;
+                        }
+                        if(temp_error_y == sl->mb_y && temp_error_x > sl->mb_x){//新的错误列更靠前
+                            temp_error_x = sl->mb_x;
+                            temp_error_y = sl->mb_y;
+                        }
+                        avctx->error_x=temp_error_x;
+                        avctx->error_y=temp_error_y;
+
+                        // flag = 1;
+                    }
+            }
+            else{
+                    if(error_flag > 0){
+                        error_flag = error_flag - 1;
+                    
+					}
+                }
+
+
+
+
+            #endif
+
             eos = get_cabac_terminate(&sl->cabac);
 
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
@@ -2730,6 +2935,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
 finish:
     sl->deblocking_filter = orig_deblock;
+
     return 0;
 }
 

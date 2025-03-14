@@ -580,13 +580,20 @@ static void debug_green_metadata(const H264SEIGreenMetaData *gm, void *logctx)
                    (float)gm->xsd_metric_value/100);
     }
 }
+#if gly_erxy
+int temp_error_x = -1;
+int temp_error_y = -1;
+int pre_errorx = -1;
+int pre_errory = -1;
 
+#endif
 static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
 {
     AVCodecContext *const avctx = h->avctx;
     int nals_needed = 0; ///< number of NALs that need decoding before the next frame thread starts
     int idr_cleared=0;
     int i, ret = 0;
+	int ax1,ax2,ay1,ay2;
 
     h->has_slice = 0;
     h->nal_unit_type= 0;
@@ -645,8 +652,20 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
             }
             idr_cleared = 1;
             h->has_recovery_point = 1;
+
+            #if gly_erxy
+            temp_error_x = -1;
+            temp_error_y = -1;
+			pre_errorx = -1;
+            pre_errory = -1;
+            #endif
+
         case H264_NAL_SLICE:
             h->has_slice = 1;
+            #if gly_erxy
+            avctx->error_x = temp_error_x;
+            avctx->error_y = temp_error_y;
+            #endif
 
             if ((err = ff_h264_queue_decode_slice(h, nal))) {
                 H264SliceContext *sl = h->slice_ctx + h->nb_slice_ctx_queued;
@@ -742,6 +761,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
     }
 
     ret = ff_h264_execute_decode_slices(h);
+    #if gly_erxy
+    ax1 = temp_error_x;
+    ay1 = temp_error_y;
+    #endif
     if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
         goto end;
 
@@ -775,6 +798,7 @@ end:
      * past end by one (callers fault) and resync_mb_y != 0
      * causes problems for the first MB line, too.
      */
+
     if (!FIELD_PICTURE(h) && h->current_slice && h->enable_er) {
 
         H264SliceContext *sl = h->slice_ctx;
@@ -784,13 +808,17 @@ end:
         ff_h264_set_erpic(&h->er.cur_pic, h->cur_pic_ptr);
 
         if (use_last_pic) {
+            
             ff_h264_set_erpic(&h->er.last_pic, &h->last_pic_for_ec);
             sl->ref_list[0][0].parent = &h->last_pic_for_ec;
             memcpy(sl->ref_list[0][0].data, h->last_pic_for_ec.f->data, sizeof(sl->ref_list[0][0].data));
             memcpy(sl->ref_list[0][0].linesize, h->last_pic_for_ec.f->linesize, sizeof(sl->ref_list[0][0].linesize));
             sl->ref_list[0][0].reference = h->last_pic_for_ec.reference;
+            
         } else if (sl->ref_count[0]) {
+            
             ff_h264_set_erpic(&h->er.last_pic, sl->ref_list[0][0].parent);
+            
         } else
             ff_h264_set_erpic(&h->er.last_pic, NULL);
 
@@ -798,6 +826,23 @@ end:
             ff_h264_set_erpic(&h->er.next_pic, sl->ref_list[1][0].parent);
 
         ff_er_frame_end(&h->er, &decode_error_flags);
+		#if gly_erxy
+        ax2 = temp_error_x;
+        ay2 = temp_error_y; 
+        // if(ay2 < ay1 && ay2 != -1) {
+        //     temp_error_x = ax1;
+        //     temp_error_y = ay1;
+        // }
+		if(temp_error_y >=  pre_errory &&  pre_errory != -1){//之前的错误坐标更靠前
+            temp_error_x = pre_errorx;
+            temp_error_y = pre_errory;
+        }
+        avctx->error_x = temp_error_x;
+        avctx->error_y = temp_error_y;
+ 		pre_errorx = temp_error_x;
+        pre_errory = temp_error_y;
+
+        #endif
         if (decode_error_flags) {
             if (h->cur_pic_ptr->decode_error_flags) {
                 atomic_int *decode_error = (atomic_int*)h->cur_pic_ptr->decode_error_flags->data;
@@ -809,6 +854,7 @@ end:
         if (use_last_pic)
             memset(&sl->ref_list[0][0], 0, sizeof(sl->ref_list[0][0]));
     }
+
 #endif /* CONFIG_ERROR_RESILIENCE */
     /* clean up */
     if (h->cur_pic_ptr && !h->droppable && h->has_slice) {

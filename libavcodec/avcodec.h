@@ -17,7 +17,9 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-
+#define gly_erxy 1
+#define gly_test 0
+#define gly_filter 1
 #ifndef AVCODEC_AVCODEC_H
 #define AVCODEC_AVCODEC_H
 
@@ -2116,6 +2118,11 @@ typedef struct AVCodecContext {
      *   an error.
      */
     int64_t frame_num;
+#if gly_erxy
+    int error_x;
+    int error_y;
+    int error_num[100][100];
+#endif
 } AVCodecContext;
 
 /**
@@ -2601,7 +2608,10 @@ int avcodec_send_packet(AVCodecContext *avctx, const AVPacket *avpkt);
  * @retval "other negative error code" legitimate decoding errors
  */
 int avcodec_receive_frame(AVCodecContext *avctx, AVFrame *frame);
-
+#if gly_erxy
+int detect_error_frame(AVCodecContext *avctx, AVFrame *frame, int threshold_variance);
+double calculate_variance(int* row1, int* row2, size_t length);
+#endif
 /**
  * Supply a raw video or audio frame to the encoder. Use avcodec_receive_packet()
  * to retrieve buffered output packets.

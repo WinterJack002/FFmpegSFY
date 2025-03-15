@@ -888,10 +888,6 @@ void ff_er_add_slice(ERContext *s, int startx, int starty,
         }
     }
 }
-#if gly_erxy
-extern int temp_error_x;
-extern int temp_error_y;
-#endif
 
 void ff_er_frame_end(ERContext *s, int *decode_error_flags)
 {
@@ -1113,15 +1109,17 @@ void ff_er_frame_end(ERContext *s, int *decode_error_flags)
         int mb_x = mb_xy % s->mb_stride;
         int mb_y = mb_xy / s->mb_stride;
         #endif
+
         if (error & ER_DC_ERROR){
             dc_error++;
-			#if gly_erxy
+#if gly_erxy
             if(dc_error == 1){
-                temp_error_x = mb_x;
-                temp_error_y = mb_y;
-                
+                // temp_error_x = mb_x;
+                // temp_error_y = mb_y;
+                s->avctx->final_error_x = mb_x;
+                s->avctx->final_error_y = mb_y;
             }
-            #endif
+#endif
         }
         if (error & ER_AC_ERROR)
             ac_error++;

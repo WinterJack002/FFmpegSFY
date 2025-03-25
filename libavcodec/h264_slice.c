@@ -2662,10 +2662,7 @@ static int filter_test(const H264Context *h, H264SliceContext *sl)
 }
 #endif
 
-#if gly_erxy
-extern int temp_error_x;
-extern int temp_error_y;
-#endif
+
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
@@ -2673,14 +2670,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     int lf_x_start = sl->mb_x;
     int orig_deblock = sl->deblocking_filter;
     int ret;
-    #if gly_erxy
-    int error_flag = 0;
-    #endif
 
-    #if gly_return 
-    ErrorCode ec;
-
-    #endif
 
 
     sl->linesize   = h->cur_pic_ptr->f->linesize[0];
@@ -2728,7 +2718,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         for (;;) {
             int ret, eos;
             int ret1 = 1,ret2 = 1;
-            avctx->error_num[sl->mb_x][sl->mb_y] = 0;
+
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
@@ -2739,7 +2729,6 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
             ret = ff_h264_decode_mb_cabac(h, sl);
 
-            parse_return_code(ret , &ec);
 
          
 
@@ -2770,42 +2759,42 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         }
 #endif
 
-            #if gly_erxy
 
-                if(ret<0 || (ret1<0 && ret2<0)){
-                    error_flag = error_flag + 1;
+            // #if gly_erxy
 
+                // if(ret<0 || (ret1<0 && ret2<0)){
+                //     error_flag = error_flag + 1;
+                //     if(error_flag == 80){
+                //         if(temp_error_y == -1){  //初始化状态
+                //             temp_error_x = sl->mb_x;
+                //             temp_error_y = sl->mb_y;
+                //         }
+                //         if(temp_error_y > sl->mb_y){ //新的错误行更靠前
+                //             temp_error_x = sl->mb_x;
+                //             temp_error_y = sl->mb_y;
+                //         }
+                //         if(temp_error_y == sl->mb_y && temp_error_x > sl->mb_x){//新的错误列更靠前
+                //             temp_error_x = sl->mb_x;
+                //             temp_error_y = sl->mb_y;
+                //         }
+                //         avctx->error_x=temp_error_x;
+                //         avctx->error_y=temp_error_y;
+
+                //         // flag = 1;
+                //     }
+                // }
+            // else{
+            //         if(error_flag > 0){
+            //             error_flag = error_flag - 1;
                     
-                    if(error_flag == 80){
-                        if(temp_error_y == -1){  //初始化状态
-                            temp_error_x = sl->mb_x;
-                            temp_error_y = sl->mb_y;
-                        }
-                        if(temp_error_y > sl->mb_y){ //新的错误行更靠前
-                            temp_error_x = sl->mb_x;
-                            temp_error_y = sl->mb_y;
-                        }
-                        if(temp_error_y == sl->mb_y && temp_error_x > sl->mb_x){//新的错误列更靠前
-                            temp_error_x = sl->mb_x;
-                            temp_error_y = sl->mb_y;
-                        }
-                        avctx->error_x=temp_error_x;
-                        avctx->error_y=temp_error_y;
-
-                        // flag = 1;
-                    }
-            }
-            else{
-                    if(error_flag > 0){
-                        error_flag = error_flag - 1;
-                    
-					}
-                }
+			// 		}
+            //     }
 
 
 
 
-            #endif
+            // #endif
+
 
             eos = get_cabac_terminate(&sl->cabac);
 

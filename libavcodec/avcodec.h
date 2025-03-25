@@ -19,8 +19,9 @@
  */
 #define gly_erxy 1
 #define gly_test 0
-#define gly_return 1
-#define gly_filter 1
+
+#define gly_filter 0
+
 #ifndef AVCODEC_AVCODEC_H
 #define AVCODEC_AVCODEC_H
 
@@ -2120,9 +2121,14 @@ typedef struct AVCodecContext {
      */
     int64_t frame_num;
 #if gly_erxy
-    int error_x;
-    int error_y;
-    int error_num[100][100];
+
+    int prev_final_error_x;
+    int prev_final_error_y;
+    int final_error_x;
+    int final_error_y;
+    // int m_ER_MB_ERROR_x;
+    // int m_ER_MB_ERROR_y;
+
 #endif
 } AVCodecContext;
 

@@ -574,6 +574,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
 
         err = s->iformat->read_packet(s, pkt);
+
         if (err < 0) {
             av_packet_unref(pkt);
 
@@ -602,6 +603,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
 
         if (pkt->flags & AV_PKT_FLAG_CORRUPT) {
+
             av_log(s, AV_LOG_WARNING,
                    "Packet corrupt (stream = %d, dts = %s)",
                    pkt->stream_index, av_ts2str(pkt->dts));
@@ -1151,6 +1153,12 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
         int64_t next_dts = pkt->dts;
         int len;
 
+        #if gly_ts
+        if(s->ts_lose_flag == 1  && pkt->er_flag == 1){
+            goto fail;
+        }
+        #endif
+
         len = av_parser_parse2(sti->parser, sti->avctx,
                                &out_pkt->data, &out_pkt->size, data, size,
                                pkt->pts, pkt->dts, pkt->pos);
@@ -1212,7 +1220,13 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
         out_pkt->dts          = sti->parser->dts;
         out_pkt->pos          = sti->parser->pos;
         out_pkt->flags       |= pkt->flags & (AV_PKT_FLAG_DISCARD | AV_PKT_FLAG_CORRUPT);
-
+        #if gly_ts
+        out_pkt->er_flag = pkt->er_flag;
+        if(pkt->er_flag == 0){
+            pkt->er_byte = -1;
+        }
+        out_pkt->er_byte = pkt->er_byte;
+        #endif
         if (sti->need_parsing == AVSTREAM_PARSE_FULL_RAW)
             out_pkt->pos = sti->parser->frame_offset;
 
@@ -2075,6 +2089,8 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st,
         if (avctx->codec_type == AVMEDIA_TYPE_VIDEO ||
             avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
             ret = avcodec_send_packet(avctx, pkt);
+            printf("byte=%d,flag=%d\n",avctx->internal->buffer_pkt->er_byte,avctx->internal->buffer_pkt->er_flag);
+
             if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
                 break;
             if (ret >= 0)
@@ -2449,7 +2465,9 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int64_t probesize = ic->probesize;
     int eof_reached = 0;
     int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
-
+    #if gly_ts
+    ic->ts_lose_flag = 0;
+    #endif
     flush_codecs = probesize > 0;
 
     av_opt_set_int(ic, "skip_clear", 1, AV_OPT_SEARCH_CHILDREN);
@@ -3028,6 +3046,8 @@ find_stream_info_err:
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %"PRId64" bytes read:%"PRId64" seeks:%d frames:%d\n",
                avio_tell(ic->pb), ctx->bytes_read, ctx->seek_count, count);
     }
+    ic->all_ts_pkt = 0;
+    ic->correct_ts_pkt = 0;
     return ret;
 
 unref_then_goto_end:

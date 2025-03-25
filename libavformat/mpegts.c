@@ -270,6 +270,12 @@ typedef struct PESContext {
     AVBufferRef *buffer;
     SLConfigDescr sl;
     int merged_st;
+    #if gly_ts
+    int er_byte;
+    int er_flag;
+    int pre_er_byte;
+    int pre_er_flag;
+    #endif
 } PESContext;
 
 extern const AVInputFormat ff_mpegts_demuxer;
@@ -1019,6 +1025,11 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     pkt->data = pes->buffer->data;
     pkt->size = pes->data_index;
 
+    #if gly_ts
+    pkt->er_byte = pes->pre_er_byte;
+    pkt->er_flag = pes->pre_er_flag;
+    #endif
+
     if (pes->PES_packet_length &&
         pes->pes_header_size + pes->data_index != pes->PES_packet_length +
         PES_START_SIZE) {
@@ -1152,8 +1163,11 @@ static int mpegts_push_data(MpegTSFilter *filter,
     if (!ts->pkt)
         return 0;
 
+
+
     if (is_start) {
         if (pes->state == MPEGTS_PAYLOAD && pes->data_index > 0) {
+
             ret = new_pes_packet(pes, ts->pkt);
             if (ret < 0)
                 return ret;
@@ -1164,6 +1178,11 @@ static int mpegts_push_data(MpegTSFilter *filter,
         pes->state         = MPEGTS_HEADER;
         pes->ts_packet_pos = pos;
     }
+
+    #if gly_ts
+    pes->pre_er_byte = pes->er_byte;
+    pes->pre_er_flag = pes->er_flag;
+    #endif
     p = buf;
     while (buf_size > 0) {
         switch (pes->state) {
@@ -2773,6 +2792,9 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
         has_adaptation, has_payload;
     const uint8_t *p, *p_end;
 
+    
+
+
     pid = AV_RB16(packet + 1) & 0x1fff;
     is_start = packet[1] & 0x40;
     tss = ts->pids[pid];
@@ -2782,15 +2804,28 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
     }
     if (!tss)
         return 0;
-    if (is_start)
+    if (is_start){
         tss->discard = discard_pid(ts, pid);
+    }
     if (tss->discard)
         return 0;
     ts->current_pid = pid;
 
     afc = (packet[3] >> 4) & 3;
-    if (afc == 0) /* reserved value */
+    if (afc == 0){ /* reserved value */
         return 0;
+    }
+
+    #if gly_ts
+    if (tss->type == MPEGTS_PES) {
+        if (is_start){
+            PESContext *pes   = tss->u.pes_filter.opaque;
+            pes->er_byte = 0;
+            pes->er_flag = 0;//无错
+        }
+    }
+    #endif
+
     has_adaptation   = afc & 2;
     has_payload      = afc & 1;
     is_discontinuity = has_adaptation &&
@@ -2805,6 +2840,12 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
             tss->last_cc < 0 ||
             expected_cc == cc;
 
+    #if gly_ts
+    AVFormatContext *s = ts->stream;
+    s->correct_ts_pkt = s->correct_ts_pkt + cc_ok;
+    // printf("correct_ts_pkt = %d\n", s->correct_ts_pkt);
+    #endif
+    
     tss->last_cc = cc;
     if (!cc_ok) {
         av_log(ts->stream, AV_LOG_DEBUG,
@@ -2813,8 +2854,13 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
         if (tss->type == MPEGTS_PES) {
             PESContext *pc = tss->u.pes_filter.opaque;
             pc->flags |= AV_PKT_FLAG_CORRUPT;
+            #if gly_ts
+            pc->er_flag = 1;
+            #endif
         }
     }
+        
+    
 
     if (packet[1] & 0x80) {
         av_log(ts->stream, AV_LOG_DEBUG, "Packet had TEI flag set; marking as corrupt\n");
@@ -2842,6 +2888,17 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
         av_assert0(pos >= TS_PACKET_SIZE);
         ts->pos47_full = pos - TS_PACKET_SIZE;
     }
+
+    #if gly_ts
+    if(cc_ok){
+        if(tss->type == MPEGTS_PES){
+            PESContext *pes = tss->u.pes_filter.opaque;
+            if(pes->er_flag == 0){
+                pes->er_byte = pes->er_byte + p_end - p;
+            }
+        }
+    }
+    #endif
 
     if (tss->type == MPEGTS_SECTION) {
         if (is_start) {
@@ -2943,6 +3000,9 @@ static int read_packet(AVFormatContext *s, uint8_t *buf, int raw_packet_size,
                        const uint8_t **data)
 {
     AVIOContext *pb = s->pb;
+
+
+    
     int len;
 
     for (;;) {
@@ -2952,15 +3012,34 @@ static int read_packet(AVFormatContext *s, uint8_t *buf, int raw_packet_size,
         /* check packet sync byte */
         if ((*data)[0] != 0x47) {
             /* find a new packet start */
-
-            if (mpegts_resync(s, raw_packet_size, *data) < 0)
+            int ret = mpegts_resync(s, raw_packet_size, *data);
+            if (  ret < 0){
+                int currect_ts_num = avio_tell(pb) / TS_PACKET_SIZE;
+                printf("cu:%d\n",currect_ts_num);
+                if(currect_ts_num < s->pre_ts_num){
+                    s->pre_ts_num = 0;
+                }
+                s->all_ts_pkt = s->all_ts_pkt + (currect_ts_num - s->pre_ts_num);
+                s->pre_ts_num = currect_ts_num;
+                printf("all_ts_pkt = %d\n", s->all_ts_pkt);
                 return AVERROR(EAGAIN);
+            }
             else
                 continue;
         } else {
             break;
         }
     }
+    #if gly_ts
+        int currect_ts_num = avio_tell(pb) / TS_PACKET_SIZE;
+        // printf("cu:%d\n",currect_ts_num);
+        if(currect_ts_num < s->pre_ts_num){
+            s->pre_ts_num = 0;
+        }
+        s->all_ts_pkt = s->all_ts_pkt + (currect_ts_num - s->pre_ts_num);
+        s->pre_ts_num = currect_ts_num;
+        // printf("all_ts_pkt = %d\n", s->all_ts_pkt);
+    #endif
     return 0;
 }
 
@@ -2999,6 +3078,7 @@ static int handle_packets(MpegTSContext *ts, int64_t nb_packets)
             }
         }
     }
+
 
     ts->stop_parse = 0;
     packet_num = 0;
@@ -3109,14 +3189,17 @@ static int mpegts_read_header(AVFormatContext *s)
     AVIOContext *pb   = s->pb;
     int64_t pos, probesize = s->probesize;
     int64_t seekback = FFMAX(s->probesize, (int64_t)ts->resync_size + PROBE_PACKET_MAX_BUF);
-
+    #if gly_ts
+    s->all_ts_pkt = 0;
+    s->correct_ts_pkt = 0;
+    #endif
     ffformatcontext(s)->prefer_codec_framerate = 1;
 
     if (ffio_ensure_seekback(pb, seekback) < 0)
         av_log(s, AV_LOG_WARNING, "Failed to allocate buffers for seekback\n");
 
-    pos = avio_tell(pb);
-    ts->raw_packet_size = get_packet_size(s);
+    pos = avio_tell(pb);//记录当前I/O位置
+    ts->raw_packet_size = get_packet_size(s);// 尝试检测TS包的大小
     if (ts->raw_packet_size <= 0) {
         av_log(s, AV_LOG_WARNING, "Could not detect TS packet size, defaulting to non-FEC/DVHS\n");
         ts->raw_packet_size = TS_PACKET_SIZE;
@@ -3261,6 +3344,7 @@ static int mpegts_read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->size = -1;
     ts->pkt = pkt;
     ret = handle_packets(ts, 0);
+
     if (ret < 0) {
         av_packet_unref(ts->pkt);
         /* flush pes data left */

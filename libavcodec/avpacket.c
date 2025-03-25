@@ -398,7 +398,10 @@ int av_packet_copy_props(AVPacket *dst, const AVPacket *src)
     dst->opaque_ref           = NULL;
     dst->side_data            = NULL;
     dst->side_data_elems      = 0;
-
+    #if gly_ts || gly_code
+    dst->er_byte              = src->er_byte;
+    dst->er_flag              = src->er_flag;
+    #endif
     ret = av_buffer_replace(&dst->opaque_ref, src->opaque_ref);
     if (ret < 0)
         return ret;

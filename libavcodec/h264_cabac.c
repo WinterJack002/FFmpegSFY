@@ -1912,7 +1912,36 @@ static av_always_inline void decode_cabac_luma_residual(const H264Context *h, H2
         }
     }
 }
+#if gly_return
+int return_error_code(unsigned int y, unsigned int x, unsigned int mb_type,
+    unsigned int prediction_mode, unsigned int slice_type, unsigned int other_error,int flag) {
+    unsigned int error_code = 0;  // 初始化错误码为0
 
+    error_code |= (y & 0xFF);                    // 设置y坐标（低8位）
+    error_code |= ((x & 0xFF) << 8);             // 设置x坐标（第9到16位）
+    error_code |= ((mb_type & 0x1) << 16);       // 设置宏块类型（第17位）
+    error_code |= ((prediction_mode & 0x1F) << 17); // 设置预测模式（第18到22位）
+    error_code |= ((slice_type & 0x1) << 22);    // 设置slice类型（第23位）
+    error_code |= ((other_error & 0x1) << 23);   // 设置其他检错（第24位）
+
+    return flag * error_code;//错误设置flag = -1；
+}
+void parse_return_code(int return_code, ErrorCode *ec) {
+    // 如果错误码为负数，取绝对值（根据 flag 的影响）
+    if (return_code < 0) {
+        ec->error_flag = 1;
+        return_code = -return_code;  // 取绝对值
+    }
+    // 提取各个部分
+    ec->y = return_code & 0xFF;  // 低8位：y坐标
+    ec->x = (return_code >> 8) & 0xFF;  // 第9到16位：x坐标
+    ec->mb_type = (return_code >> 16) & 0x1;  // 第17位：宏块类型
+    ec->prediction_mode = (return_code >> 17) & 0x1F;  // 第18到22位：预测模式
+    ec->slice_type = (return_code >> 22) & 0x1;  // 第23位：slice类型
+    ec->other_error = (return_code >> 23) & 0x1;  // 第24位：其他检错
+
+}
+#endif
 /**
  * Decode a macroblock.
  * @return 0 if OK, ER_AC_ERROR / ER_DC_ERROR / ER_MV_ERROR if an error is noticed
@@ -1925,11 +1954,14 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
     int dct8x8_allowed = h->ps.pps->transform_8x8_mode;
     const int decode_chroma = sps->chroma_format_idc == 1 || sps->chroma_format_idc == 2;
     const int pixel_shift = h->pixel_shift;
+    #if gly_return
+    unsigned int slice_type = (sl->slice_type == AV_PICTURE_TYPE_P) ? 0 : 1;
+    #endif
 
     mb_xy = sl->mb_xy = sl->mb_x + sl->mb_y*h->mb_stride;
 
     ff_tlog(h->avctx, "pic:%d mb:%d/%d\n", h->poc.frame_num, sl->mb_x, sl->mb_y);
-    if (sl->slice_type_nos != AV_PICTURE_TYPE_I) {
+    if (sl->slice_type_nos != AV_PICTURE_TYPE_I) {//p帧的skip宏块
         int skip;
         /* a skipped mb needs the aff flag from the following mb */
         if (FRAME_MBAFF(h) && (sl->mb_y & 1) == 1 && sl->prev_mb_skipped)
@@ -1951,7 +1983,7 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
             h->chroma_pred_mode_table[mb_xy] = 0;
             sl->last_qscale_diff = 0;
 
-            return 0;
+            return return_error_code(sl->mb_y,sl->mb_x, 0 , 31 , slice_type ,0 , 1);
 
         }
     }
@@ -2049,13 +2081,15 @@ decode_intra_mb:
 
         // The pixels are stored in the same order as levels in h->mb array.
         if ((int) (sl->cabac.bytestream_end - ptr) < mb_size)
-            return -1;
+            return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 1 , -1);
+            // return -1;
         sl->intra_pcm_ptr = ptr;
         ptr += mb_size;
 
         ret = ff_init_cabac_decoder(&sl->cabac, ptr, sl->cabac.bytestream_end - ptr);
         if (ret < 0)
-            return ret;
+            return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 1 , -1);
+            // return ret;
 
         // All blocks are present
         h->cbp_table[mb_xy] = 0xf7ef;
@@ -2066,7 +2100,8 @@ decode_intra_mb:
         memset(h->non_zero_count[mb_xy], 16, 48);
         h->cur_pic.mb_type[mb_xy] = mb_type;
         sl->last_qscale_diff = 0;
-        return 0;
+            return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 0 , 1);
+        // return 0;
     }
 
     fill_decode_caches(h, sl, mb_type);
@@ -2084,7 +2119,7 @@ decode_intra_mb:
             } else {
                 for( i = 0; i < 16; i++ ) {
                     int pred = pred_intra_mode(h, sl, i);
-                    sl->intra4x4_pred_mode_cache[scan8[i]] = decode_cabac_mb_intra4x4_pred_mode(sl, pred);
+                    sl->intra4x4_pred_mode_cache[scan8[i]] = decode_cabac_mb_intra4x4_pred_mode(sl, pred);//确定预测模式
 
                     ff_tlog(h->avctx, "i4x4 pred=%d mode=%d\n", pred,
                             sl->intra4x4_pred_mode_cache[scan8[i]]);
@@ -2093,11 +2128,15 @@ decode_intra_mb:
             write_back_intra_pred_mode(h, sl);
             if (ff_h264_check_intra4x4_pred_mode(sl->intra4x4_pred_mode_cache, h->avctx,
                                                  sl->top_samples_available, sl->left_samples_available) < 0 )
-                return -1;
+                return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 0 , -1);
+                // return -1;
         } else {
             sl->intra16x16_pred_mode = ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                                      sl->left_samples_available, sl->intra16x16_pred_mode, 0);
-            if (sl->intra16x16_pred_mode < 0) return -1;
+            if (sl->intra16x16_pred_mode < 0) {
+                return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 0 , -1);
+                // return -1;
+            }
         }
         if(decode_chroma){
             h->chroma_pred_mode_table[mb_xy] =
@@ -2105,7 +2144,10 @@ decode_intra_mb:
 
             pred_mode= ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                      sl->left_samples_available, pred_mode, 1 );
-            if( pred_mode < 0 ) return -1;
+            if( pred_mode < 0 ) {
+                // return -1;
+                return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 0 , -1);
+            }
             sl->chroma_pred_mode = pred_mode;
         } else {
             sl->chroma_pred_mode = DC_128_PRED8x8;
@@ -2146,7 +2188,8 @@ decode_intra_mb:
                             ref[list][i] = decode_cabac_mb_ref(sl, list, 4 * i);
                             if (ref[list][i] >= rc) {
                                 av_log(h->avctx, AV_LOG_ERROR, "Reference %d >= %d\n", ref[list][i], rc);
-                                return -1;
+                                // return -1;
+                                return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 0 , -1);
                             }
                         }else
                             ref[list][i] = 0;
@@ -2233,7 +2276,8 @@ decode_intra_mb:
                         ref= decode_cabac_mb_ref(sl, list, 0);
                         if (ref >= rc) {
                             av_log(h->avctx, AV_LOG_ERROR, "Reference %d >= %d\n", ref, rc);
-                            return -1;
+                            return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 0 , -1);
+                            // return -1;
                         }
                     }else
                         ref=0;
@@ -2262,7 +2306,8 @@ decode_intra_mb:
                                 ref= decode_cabac_mb_ref(sl, list, 8 * i);
                                 if (ref >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "Reference %d >= %d\n", ref, rc);
-                                    return -1;
+                                    return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 0 , -1);
+                                    // return -1;
                                 }
                             }else
                                 ref=0;
@@ -2298,7 +2343,8 @@ decode_intra_mb:
                                 ref = decode_cabac_mb_ref(sl, list, 4 * i);
                                 if (ref >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "Reference %d >= %d\n", ref, rc);
-                                    return -1;
+                                    return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 0 , -1);
+                                    // return -1;
                                 }
                             }else
                                 ref=0;
@@ -2338,7 +2384,8 @@ decode_intra_mb:
     } else {
         if (!decode_chroma && cbp>15) {
             av_log(h->avctx, AV_LOG_ERROR, "gray chroma\n");
-            return AVERROR_INVALIDDATA;
+            return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 1 , -1);
+            // return AVERROR_INVALIDDATA;
         }
     }
 
@@ -2406,7 +2453,8 @@ decode_intra_mb:
                 val++;
                 if(val > 2*max_qp){ //prevent infinite loop
                     av_log(h->avctx, AV_LOG_ERROR, "cabac decode of qscale diff failed at %d %d\n", sl->mb_x, sl->mb_y);
-                    return -1;
+                    return return_error_code(sl->mb_y,sl->mb_x, 1 , mb_type , slice_type , 1 , -1);
+                    // return -1;
                 }
             }
 
@@ -2495,5 +2543,6 @@ decode_intra_mb:
     h->cur_pic.qscale_table[mb_xy] = sl->qscale;
     write_back_non_zero_count(h, sl);
 
-    return 0;
+    return return_error_code(sl->mb_y,sl->mb_x, 0 , mb_type , slice_type , 0 , 1);
+    // return 0;
 }

@@ -888,6 +888,10 @@ void ff_er_add_slice(ERContext *s, int startx, int starty,
         }
     }
 }
+#if gly_erxy
+extern int temp_error_x;
+extern int temp_error_y;
+#endif
 
 void ff_er_frame_end(ERContext *s, int *decode_error_flags)
 {
@@ -1101,11 +1105,24 @@ void ff_er_frame_end(ERContext *s, int *decode_error_flags)
 #endif
 
     dc_error = ac_error = mv_error = 0;
+
     for (i = 0; i < s->mb_num; i++) {
         const int mb_xy = s->mb_index2xy[i];
         int error = s->error_status_table[mb_xy];
-        if (error & ER_DC_ERROR)
+		#if gly_erxy
+        int mb_x = mb_xy % s->mb_stride;
+        int mb_y = mb_xy / s->mb_stride;
+        #endif
+        if (error & ER_DC_ERROR){
             dc_error++;
+			#if gly_erxy
+            if(dc_error == 1){
+                temp_error_x = mb_x;
+                temp_error_y = mb_y;
+                
+            }
+            #endif
+        }
         if (error & ER_AC_ERROR)
             ac_error++;
         if (error & ER_MV_ERROR)
@@ -1120,6 +1137,7 @@ void ff_er_frame_end(ERContext *s, int *decode_error_flags)
         s->cur_pic.f->decode_error_flags |= FF_DECODE_ERROR_CONCEALMENT_ACTIVE;
 
     is_intra_likely = is_intra_more_likely(s);
+    is_intra_likely = 0;
 
     /* set unknown mb-type to most likely */
     for (i = 0; i < s->mb_num; i++) {

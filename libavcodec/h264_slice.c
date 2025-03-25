@@ -2662,6 +2662,7 @@ static int filter_test(const H264Context *h, H264SliceContext *sl)
 }
 #endif
 
+
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
@@ -2669,13 +2670,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     int lf_x_start = sl->mb_x;
     int orig_deblock = sl->deblocking_filter;
     int ret;
-    // #if gly_erxy
 
-    
-    // int error_flag = 0;
-
-
-    // #endif
 
 
     sl->linesize   = h->cur_pic_ptr->f->linesize[0];
@@ -2723,7 +2718,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         for (;;) {
             int ret, eos;
             int ret1 = 1,ret2 = 1;
-            // avctx->error_num[sl->mb_x][sl->mb_y] = 0;
+
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
@@ -2733,6 +2728,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             }
 
             ret = ff_h264_decode_mb_cabac(h, sl);
+
 
          
 
@@ -2762,6 +2758,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             }
         }
 #endif
+
 
             // #if gly_erxy
 
@@ -2797,6 +2794,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
 
             // #endif
+
 
             eos = get_cabac_terminate(&sl->cabac);
 

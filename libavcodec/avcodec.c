@@ -714,7 +714,103 @@ int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *fr
 {
     av_frame_unref(frame);
 
-    if (av_codec_is_decoder(avctx->codec))
-        return ff_decode_receive_frame(avctx, frame);
+    if (av_codec_is_decoder(avctx->codec)){
+        int ret = ff_decode_receive_frame(avctx, frame);
+		// if(frame->width != 0){
+        // detect_error_frame(avctx,frame,1);
+        // }
+        return ret;
+    }else
     return ff_encode_receive_frame(avctx, frame);
 }
+
+// #if gly_erxy
+// int detect_error_frame(AVCodecContext *avctx, AVFrame *frame, int threshold_variance) {
+//     uint8_t *dest_y = frame->data[0]; // Y 数据指针
+//     int linesize = frame->width; // Y 数据行大小
+//     int height = frame->height;         // 视频帧高度
+//     int width = frame->width;               // 视频帧宽度 (假设 linesize 就是宽度)
+
+
+
+//     // 分配内存来存储两行的亮度值
+//     int *row_data[2];
+//     row_data[0] = (int *)malloc(width * sizeof(int));
+//     row_data[1] = (int *)malloc(width * sizeof(int));
+
+//     if (!row_data[0] || !row_data[1]) {
+//         fprintf(stderr, "内存分配失败\n");
+//         if(row_data[0]) free(row_data[0]);
+//         if(row_data[1]) free(row_data[1]);
+//         return -1;
+//     }
+
+
+//     size_t column_index = 0; // 选取第一列
+//     int last_value = dest_y[(height - 1) * linesize + column_index]; // 底部第一个值
+//     int error_found = 0;
+
+//     for (int row = height - 2; row >= 0; --row) { // 从倒数第二行开始向上遍历
+//         int current_value = dest_y[row * linesize + column_index];
+//         if (abs(current_value - last_value) < 2) {
+//             last_value = current_value;
+//         } else {
+//             // 将当前行和下一行的亮度值读取到数组中
+//             for (int col = 0; col < width; ++col) {
+//                 row_data[0][col] = dest_y[row * linesize + col];
+//                 row_data[1][col] = dest_y[(row + 1) * linesize + col];
+//             }
+
+//             double variance = calculate_variance(row_data[0], row_data[1], width);
+
+//             if (variance < threshold_variance) {
+//                 last_value = current_value;
+//             } else {
+//                 avctx->error_y = row + 1;
+//                 // printf("找到错误行: 第%d行\n", avctx->error_y);
+//                 // printf("当前行第一列数据的差值: %d\n", abs(current_value - last_value));
+//                 // printf("横向扫描计算的方差值: %.2f\n", variance);
+//                 error_found = 1;
+//                 break;
+//             }
+//         }
+//     }
+
+//     if (!error_found) {
+//         printf("未发现错误行\n");
+//     }
+
+//     // 释放内存
+//     free(row_data[0]);
+//     free(row_data[1]);
+
+//     return error_found; // 返回是否找到错误
+// }
+// double calculate_variance(int* row1, int* row2, size_t length) {
+//     double mean_diff = 0.0;
+//     double variance = 0.0;
+//     double *diff = (double*)malloc(length * sizeof(double)); // 使用 malloc 分配内存
+
+//     if (diff == NULL) {
+//         perror("malloc failed");
+//         return -1; // 或者其他错误处理
+//     }
+
+//     // 计算差值绝对值
+//     for (size_t i = 0; i < length; ++i) {
+//         diff[i] = fabs(row1[i] - row2[i]);
+//         mean_diff += diff[i];
+//     }
+//     mean_diff /= length;
+
+//     // 计算方差
+//     for (size_t i = 0; i < length; ++i) {
+//         variance += pow(diff[i] - mean_diff, 2);
+//     }
+//     variance /= length;
+
+//     free(diff); // 释放内存
+
+//     return variance;
+// }
+// #endif

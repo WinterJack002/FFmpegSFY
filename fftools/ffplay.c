@@ -3007,7 +3007,9 @@ static int read_thread(void *arg)
                 goto fail;
             }
         }
+        
         ret = av_read_frame(ic, pkt);
+        // printf("pkt->er_Byte:%d,pkt->erflag:%d,all_pkt:%d,correct_pkt:%d\n",pkt->er_byte,pkt->er_flag,ic->all_ts_pkt,ic->correct_ts_pkt);
         if (ret < 0) {
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof) {
                 if (is->video_stream >= 0)

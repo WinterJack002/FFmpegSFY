@@ -38,7 +38,8 @@
  * Types and functions for working with AVPacketSideData.
  * @{
  */
-enum AVPacketSideDataType {
+enum AVPacketSideDataType
+{
     /**
      * An AV_PKT_DATA_PALETTE side data packet contains exactly AVPALETTE_SIZE
      * bytes worth of palette. This side data signals that a new palette is
@@ -310,7 +311,7 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_NB
 };
 
-#define AV_PKT_DATA_QUALITY_FACTOR AV_PKT_DATA_QUALITY_STATS //DEPRECATED
+#define AV_PKT_DATA_QUALITY_FACTOR AV_PKT_DATA_QUALITY_STATS // DEPRECATED
 
 /**
  * This structure stores auxiliary information for decoding, presenting, or
@@ -339,9 +340,10 @@ enum AVPacketSideDataType {
  * depending on media type and codec. Refer to @ref AVPacketSideDataType for a
  * list of defined types and where they may be found or used.
  */
-typedef struct AVPacketSideData {
+typedef struct AVPacketSideData
+{
     uint8_t *data;
-    size_t   size;
+    size_t size;
     enum AVPacketSideDataType type;
 } AVPacketSideData;
 
@@ -465,7 +467,8 @@ const char *av_packet_side_data_name(enum AVPacketSideDataType type);
  * @see av_packet_ref
  * @see av_packet_unref
  */
-typedef struct AVPacket {
+typedef struct AVPacket
+{
     /**
      * A reference to the reference-counted buffer where the packet data is
      * stored.
@@ -489,12 +492,12 @@ typedef struct AVPacket {
      */
     int64_t dts;
     uint8_t *data;
-    int   size;
-    int   stream_index;
+    int size;
+    int stream_index;
     /**
      * A combination of AV_PKT_FLAG values
      */
-    int   flags;
+    int flags;
     /**
      * Additional packet data that can be provided by the container.
      * Packet can contain several types of side information.
@@ -508,7 +511,7 @@ typedef struct AVPacket {
      */
     int64_t duration;
 
-    int64_t pos;                            ///< byte position in stream, -1 if unknown
+    int64_t pos; ///< byte position in stream, -1 if unknown
 
     /**
      * for some private data of the user
@@ -533,47 +536,52 @@ typedef struct AVPacket {
      * or muxers.
      */
     AVRational time_base;
+
+    int pkt_error_flag;
+    int pkt_error_pos;
+    int error_sum_per_pkt;
 } AVPacket;
 
 #if FF_API_INIT_PACKET
-attribute_deprecated
-typedef struct AVPacketList {
+attribute_deprecated typedef struct AVPacketList
+{
     AVPacket pkt;
     struct AVPacketList *next;
 } AVPacketList;
 #endif
 
-#define AV_PKT_FLAG_KEY     0x0001 ///< The packet contains a keyframe
+#define AV_PKT_FLAG_KEY 0x0001     ///< The packet contains a keyframe
 #define AV_PKT_FLAG_CORRUPT 0x0002 ///< The packet content is corrupted
 /**
  * Flag is used to discard packets which are required to maintain valid
  * decoder state but are not required for output and should be dropped
  * after decoding.
  **/
-#define AV_PKT_FLAG_DISCARD   0x0004
+#define AV_PKT_FLAG_DISCARD 0x0004
 /**
  * The packet comes from a trusted source.
  *
  * Otherwise-unsafe constructs such as arbitrary pointers to data
  * outside the packet may be followed.
  */
-#define AV_PKT_FLAG_TRUSTED   0x0008
+#define AV_PKT_FLAG_TRUSTED 0x0008
 /**
  * Flag is used to indicate packets that contain frames that can
  * be discarded by the decoder.  I.e. Non-reference frames.
  */
 #define AV_PKT_FLAG_DISPOSABLE 0x0010
 
-enum AVSideDataParamChangeFlags {
+enum AVSideDataParamChangeFlags
+{
 #if FF_API_OLD_CHANNEL_LAYOUT
     /**
      * @deprecated those are not used by any decoder
      */
-    AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT  = 0x0001,
+    AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT = 0x0001,
     AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_LAYOUT = 0x0002,
 #endif
-    AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE    = 0x0004,
-    AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS     = 0x0008,
+    AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE = 0x0004,
+    AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS = 0x0008,
 };
 
 /**
@@ -625,8 +633,7 @@ void av_packet_free(AVPacket **pkt);
  * @deprecated This function is deprecated. Once it's removed,
                sizeof(AVPacket) will not be a part of the ABI anymore.
  */
-attribute_deprecated
-void av_init_packet(AVPacket *pkt);
+attribute_deprecated void av_init_packet(AVPacket *pkt);
 #endif
 
 /**
@@ -678,7 +685,7 @@ int av_packet_from_data(AVPacket *pkt, uint8_t *data, int size);
  * @param size side information size
  * @return pointer to fresh allocated data or NULL otherwise
  */
-uint8_t* av_packet_new_side_data(AVPacket *pkt, enum AVPacketSideDataType type,
+uint8_t *av_packet_new_side_data(AVPacket *pkt, enum AVPacketSideDataType type,
                                  size_t size);
 
 /**
@@ -717,7 +724,7 @@ int av_packet_shrink_side_data(AVPacket *pkt, enum AVPacketSideDataType type,
  *             or to zero if the desired side data is not present.
  * @return pointer to data if present or NULL otherwise
  */
-uint8_t* av_packet_get_side_data(const AVPacket *pkt, enum AVPacketSideDataType type,
+uint8_t *av_packet_get_side_data(const AVPacket *pkt, enum AVPacketSideDataType type,
                                  size_t *size);
 
 /**

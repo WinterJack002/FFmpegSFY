@@ -39,7 +39,8 @@ AVCodecParserContext *av_parser_init(int codec_id)
     if (codec_id == AV_CODEC_ID_NONE)
         return NULL;
 
-    while ((parser = av_parser_iterate(&i))) {
+    while ((parser = av_parser_iterate(&i)))
+    {
         if (parser->codec_ids[0] == codec_id ||
             parser->codec_ids[1] == codec_id ||
             parser->codec_ids[2] == codec_id ||
@@ -59,18 +60,19 @@ found:
     s->priv_data = av_mallocz(parser->priv_data_size);
     if (!s->priv_data)
         goto err_out;
-    s->fetch_timestamp=1;
+    s->fetch_timestamp = 1;
     s->pict_type = AV_PICTURE_TYPE_I;
-    if (parser->parser_init) {
+    if (parser->parser_init)
+    {
         ret = parser->parser_init(s);
         if (ret != 0)
             goto err_out;
     }
-    s->key_frame            = -1;
-    s->dts_sync_point       = INT_MIN;
-    s->dts_ref_dts_delta    = INT_MIN;
-    s->pts_dts_delta        = INT_MIN;
-    s->format               = -1;
+    s->key_frame = -1;
+    s->dts_sync_point = INT_MIN;
+    s->dts_ref_dts_delta = INT_MIN;
+    s->pts_dts_delta = INT_MIN;
+    s->format = -1;
 
     return s;
 
@@ -85,23 +87,27 @@ void ff_fetch_timestamp(AVCodecParserContext *s, int off, int remove, int fuzzy)
 {
     int i;
 
-    if (!fuzzy) {
-        s->dts    =
-        s->pts    = AV_NOPTS_VALUE;
-        s->pos    = -1;
+    if (!fuzzy)
+    {
+        s->dts =
+            s->pts = AV_NOPTS_VALUE;
+        s->pos = -1;
         s->offset = 0;
     }
-    for (i = 0; i < AV_PARSER_PTS_NB; i++) {
+    for (i = 0; i < AV_PARSER_PTS_NB; i++)
+    {
         if (s->cur_offset + off >= s->cur_frame_offset[i] &&
             (s->frame_offset < s->cur_frame_offset[i] ||
              (!s->frame_offset && !s->next_frame_offset)) && // first field/frame
-            // check disabled since MPEG-TS does not send complete PES packets
-            /*s->next_frame_offset + off <*/  s->cur_frame_end[i]){
+                                                             // check disabled since MPEG-TS does not send complete PES packets
+            /*s->next_frame_offset + off <*/ s->cur_frame_end[i])
+        {
 
-            if (!fuzzy || s->cur_frame_dts[i] != AV_NOPTS_VALUE) {
-                s->dts    = s->cur_frame_dts[i];
-                s->pts    = s->cur_frame_pts[i];
-                s->pos    = s->cur_frame_pos[i];
+            if (!fuzzy || s->cur_frame_dts[i] != AV_NOPTS_VALUE)
+            {
+                s->dts = s->cur_frame_dts[i];
+                s->pts = s->cur_frame_pts[i];
+                s->pos = s->cur_frame_pos[i];
                 s->offset = s->next_frame_offset - s->cur_frame_offset[i];
             }
             if (remove)
@@ -131,40 +137,48 @@ int av_parser_parse2(AVCodecParserContext *s, AVCodecContext *avctx,
                avctx->codec_id == s->parser->codec_ids[5] ||
                avctx->codec_id == s->parser->codec_ids[6]);
 
-    if (!(s->flags & PARSER_FLAG_FETCHED_OFFSET)) {
+    if (!(s->flags & PARSER_FLAG_FETCHED_OFFSET))
+    {
         s->next_frame_offset =
-        s->cur_offset        = pos;
-        s->flags            |= PARSER_FLAG_FETCHED_OFFSET;
+            s->cur_offset = pos;
+        s->flags |= PARSER_FLAG_FETCHED_OFFSET;
     }
 
-    if (buf_size == 0) {
+    if (buf_size == 0)
+    {
         /* padding is always necessary even if EOF, so we add it here */
         memset(dummy_buf, 0, sizeof(dummy_buf));
         buf = dummy_buf;
-    } else if (s->cur_offset + buf_size != s->cur_frame_end[s->cur_frame_start_index]) { /* skip remainder packets */
+    }
+    else if (s->cur_offset + buf_size != s->cur_frame_end[s->cur_frame_start_index])
+    { /* skip remainder packets */
         /* add a new packet descriptor */
         i = (s->cur_frame_start_index + 1) & (AV_PARSER_PTS_NB - 1);
         s->cur_frame_start_index = i;
-        s->cur_frame_offset[i]   = s->cur_offset;
-        s->cur_frame_end[i]      = s->cur_offset + buf_size;
-        s->cur_frame_pts[i]      = pts;
-        s->cur_frame_dts[i]      = dts;
-        s->cur_frame_pos[i]      = pos;
+        s->cur_frame_offset[i] = s->cur_offset;
+        s->cur_frame_end[i] = s->cur_offset + buf_size;
+        s->cur_frame_pts[i] = pts;
+        s->cur_frame_dts[i] = dts;
+        s->cur_frame_pos[i] = pos;
     }
 
-    if (s->fetch_timestamp) {
+    if (s->fetch_timestamp)
+    {
         s->fetch_timestamp = 0;
-        s->last_pts        = s->pts;
-        s->last_dts        = s->dts;
-        s->last_pos        = s->pos;
+        s->last_pts = s->pts;
+        s->last_dts = s->dts;
+        s->last_pos = s->pos;
         ff_fetch_timestamp(s, 0, 0, 0);
     }
     /* WARNING: the returned index can be negative */
-    index = s->parser->parser_parse(s, avctx, (const uint8_t **) poutbuf,
+    index = s->parser->parser_parse(s, avctx, (const uint8_t **)poutbuf, // 指针函数调用 h264_parse 组帧
                                     poutbuf_size, buf, buf_size);
     av_assert0(index > -0x20000000); // The API does not allow returning AVERROR codes
-#define FILL(name) if(s->name > 0 && avctx->name <= 0) avctx->name = s->name
-    if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+#define FILL(name)                       \
+    if (s->name > 0 && avctx->name <= 0) \
+    avctx->name = s->name
+    if (avctx->codec_type == AVMEDIA_TYPE_VIDEO)
+    {
         FILL(field_order);
         FILL(coded_width);
         FILL(coded_height);
@@ -173,14 +187,17 @@ int av_parser_parse2(AVCodecParserContext *s, AVCodecContext *avctx,
     }
 
     /* update the file pointer */
-    if (*poutbuf_size) {
+    if (*poutbuf_size)
+    {
         /* fill the data for the current frame */
         s->frame_offset = s->next_frame_offset;
 
         /* offset of the next frame */
         s->next_frame_offset = s->cur_offset + index;
-        s->fetch_timestamp   = 1;
-    } else {
+        s->fetch_timestamp = 1;
+    }
+    else
+    {
         /* Don't return a pointer to dummy_buf. */
         *poutbuf = NULL;
     }
@@ -192,7 +209,8 @@ int av_parser_parse2(AVCodecParserContext *s, AVCodecContext *avctx,
 
 void av_parser_close(AVCodecParserContext *s)
 {
-    if (s) {
+    if (s)
+    {
         if (s->parser->parser_close)
             s->parser->parser_close(s);
         av_freep(&s->priv_data);
@@ -203,8 +221,9 @@ void av_parser_close(AVCodecParserContext *s)
 int ff_combine_frame(ParseContext *pc, int next,
                      const uint8_t **buf, int *buf_size)
 {
-    if (pc->overread) {
-        ff_dlog(NULL, "overread %d, state:%"PRIX32" next:%d index:%d o_index:%d\n",
+    if (pc->overread)
+    {
+        ff_dlog(NULL, "overread %d, state:%" PRIX32 " next:%d index:%d o_index:%d\n",
                 pc->overread, pc->state, next, pc->index, pc->overread_index);
         ff_dlog(NULL, "%X %X %X %X\n",
                 (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
@@ -224,12 +243,14 @@ int ff_combine_frame(ParseContext *pc, int next,
     pc->last_index = pc->index;
 
     /* copy into buffer end return */
-    if (next == END_NOT_FOUND) {
+    if (next == END_NOT_FOUND)
+    {
         void *new_buffer = av_fast_realloc(pc->buffer, &pc->buffer_size,
                                            *buf_size + pc->index +
-                                           AV_INPUT_BUFFER_PADDING_SIZE);
+                                               AV_INPUT_BUFFER_PADDING_SIZE);
 
-        if (!new_buffer) {
+        if (!new_buffer)
+        {
             av_log(NULL, AV_LOG_ERROR, "Failed to reallocate parser buffer to %d\n", *buf_size + pc->index + AV_INPUT_BUFFER_PADDING_SIZE);
             pc->index = 0;
             return AVERROR(ENOMEM);
@@ -242,18 +263,20 @@ int ff_combine_frame(ParseContext *pc, int next,
 
     av_assert0(next >= 0 || pc->buffer);
 
-    *buf_size          =
-    pc->overread_index = pc->index + next;
+    *buf_size =
+        pc->overread_index = pc->index + next;
 
     /* append to buffer */
-    if (pc->index) {
+    if (pc->index)
+    {
         void *new_buffer = av_fast_realloc(pc->buffer, &pc->buffer_size,
                                            next + pc->index +
-                                           AV_INPUT_BUFFER_PADDING_SIZE);
-        if (!new_buffer) {
+                                               AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!new_buffer)
+        {
             av_log(NULL, AV_LOG_ERROR, "Failed to reallocate parser buffer to %d\n", next + pc->index + AV_INPUT_BUFFER_PADDING_SIZE);
             pc->overread_index =
-            pc->index = 0;
+                pc->index = 0;
             return AVERROR(ENOMEM);
         }
         pc->buffer = new_buffer;
@@ -261,22 +284,25 @@ int ff_combine_frame(ParseContext *pc, int next,
             memcpy(&pc->buffer[pc->index], *buf,
                    next + AV_INPUT_BUFFER_PADDING_SIZE);
         pc->index = 0;
-        *buf      = pc->buffer;
+        *buf = pc->buffer;
     }
 
-    if (next < -8) {
+    if (next < -8)
+    {
         pc->overread += -8 - next;
         next = -8;
     }
     /* store overread bytes */
-    for (; next < 0; next++) {
-        pc->state   = pc->state   << 8 | pc->buffer[pc->last_index + next];
+    for (; next < 0; next++)
+    {
+        pc->state = pc->state << 8 | pc->buffer[pc->last_index + next];
         pc->state64 = pc->state64 << 8 | pc->buffer[pc->last_index + next];
         pc->overread++;
     }
 
-    if (pc->overread) {
-        ff_dlog(NULL, "overread %d, state:%"PRIX32" next:%d index:%d o_index:%d\n",
+    if (pc->overread)
+    {
+        ff_dlog(NULL, "overread %d, state:%" PRIX32 " next:%d index:%d o_index:%d\n",
                 pc->overread, pc->state, next, pc->index, pc->overread_index);
         ff_dlog(NULL, "%X %X %X %X\n",
                 (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);

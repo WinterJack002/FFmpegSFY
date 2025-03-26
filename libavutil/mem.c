@@ -48,17 +48,17 @@
 
 #ifdef MALLOC_PREFIX
 
-#define malloc         AV_JOIN(MALLOC_PREFIX, malloc)
-#define memalign       AV_JOIN(MALLOC_PREFIX, memalign)
+#define malloc AV_JOIN(MALLOC_PREFIX, malloc)
+#define memalign AV_JOIN(MALLOC_PREFIX, memalign)
 #define posix_memalign AV_JOIN(MALLOC_PREFIX, posix_memalign)
-#define realloc        AV_JOIN(MALLOC_PREFIX, realloc)
-#define free           AV_JOIN(MALLOC_PREFIX, free)
+#define realloc AV_JOIN(MALLOC_PREFIX, realloc)
+#define free AV_JOIN(MALLOC_PREFIX, free)
 
 void *malloc(size_t size);
 void *memalign(size_t align, size_t size);
-int   posix_memalign(void **ptr, size_t align, size_t size);
+int posix_memalign(void **ptr, size_t align, size_t size);
 void *realloc(void *ptr, size_t size);
-void  free(void *ptr);
+void free(void *ptr);
 
 #endif /* MALLOC_PREFIX */
 
@@ -71,7 +71,8 @@ void  free(void *ptr);
 
 static atomic_size_t max_alloc_size = ATOMIC_VAR_INIT(INT_MAX);
 
-void av_max_alloc(size_t max){
+void av_max_alloc(size_t max)
+{
     atomic_store_explicit(&max_alloc_size, max, memory_order_relaxed);
 }
 
@@ -79,7 +80,7 @@ static int size_mult(size_t a, size_t b, size_t *r)
 {
     size_t t;
 
-#if (!defined(__INTEL_COMPILER) && AV_GCC_VERSION_AT_LEAST(5,1)) || AV_HAS_BUILTIN(__builtin_mul_overflow)
+#if (!defined(__INTEL_COMPILER) && AV_GCC_VERSION_AT_LEAST(5, 1)) || AV_HAS_BUILTIN(__builtin_mul_overflow)
     if (__builtin_mul_overflow(a, b, &t))
         return AVERROR(EINVAL);
 #else
@@ -101,9 +102,9 @@ void *av_malloc(size_t size)
         return NULL;
 
 #if HAVE_POSIX_MEMALIGN
-    if (size) //OS X on SDK 10.6 has a broken posix_memalign implementation
-    if (posix_memalign(&ptr, ALIGN, size))
-        ptr = NULL;
+    if (size) // OS X on SDK 10.6 has a broken posix_memalign implementation
+        if (posix_memalign(&ptr, ALIGN, size))
+            ptr = NULL;
 #elif HAVE_ALIGNED_MALLOC
     ptr = _aligned_malloc(size, ALIGN);
 #elif HAVE_MEMALIGN
@@ -139,9 +140,10 @@ void *av_malloc(size_t size)
 #else
     ptr = malloc(size);
 #endif
-    if(!ptr && !size) {
+    if (!ptr && !size)
+    {
         size = 1;
-        ptr= av_malloc(1);
+        ptr = av_malloc(1);
     }
 #if CONFIG_MEMORY_POISONING
     if (ptr)
@@ -173,7 +175,8 @@ void *av_realloc_f(void *ptr, size_t nelem, size_t elsize)
     size_t size;
     void *r;
 
-    if (size_mult(elsize, nelem, &size)) {
+    if (size_mult(elsize, nelem, &size))
+    {
         av_free(ptr);
         return NULL;
     }
@@ -187,7 +190,8 @@ int av_reallocp(void *ptr, size_t size)
 {
     void *val;
 
-    if (!size) {
+    if (!size)
+    {
         av_freep(ptr);
         return 0;
     }
@@ -195,7 +199,8 @@ int av_reallocp(void *ptr, size_t size)
     memcpy(&val, ptr, sizeof(val));
     val = av_realloc(val, size);
 
-    if (!val) {
+    if (!val)
+    {
         av_freep(ptr);
         return AVERROR(ENOMEM);
     }
@@ -247,7 +252,7 @@ void av_freep(void *arg)
     void *val;
 
     memcpy(&val, arg, sizeof(val));
-    memcpy(arg, &(void *){ NULL }, sizeof(val));
+    memcpy(arg, &(void *){NULL}, sizeof(val));
     av_free(val);
 }
 
@@ -270,7 +275,8 @@ void *av_calloc(size_t nmemb, size_t size)
 char *av_strdup(const char *s)
 {
     char *ptr = NULL;
-    if (s) {
+    if (s)
+    {
         size_t len = strlen(s) + 1;
         ptr = av_realloc(NULL, len);
         if (ptr)
@@ -302,7 +308,8 @@ char *av_strndup(const char *s, size_t len)
 void *av_memdup(const void *p, size_t size)
 {
     void *ptr = NULL;
-    if (p) {
+    if (p)
+    {
         ptr = av_malloc(size);
         if (ptr)
             memcpy(ptr, p, size);
@@ -317,10 +324,7 @@ int av_dynarray_add_nofree(void *tab_ptr, int *nb_ptr, void *elem)
 
     FF_DYNARRAY_ADD(INT_MAX, sizeof(*tab), tab, *nb_ptr, {
         tab[*nb_ptr] = elem;
-        memcpy(tab_ptr, &tab, sizeof(tab));
-    }, {
-        return AVERROR(ENOMEM);
-    });
+        memcpy(tab_ptr, &tab, sizeof(tab)); }, { return AVERROR(ENOMEM); });
     return 0;
 }
 
@@ -331,11 +335,9 @@ void av_dynarray_add(void *tab_ptr, int *nb_ptr, void *elem)
 
     FF_DYNARRAY_ADD(INT_MAX, sizeof(*tab), tab, *nb_ptr, {
         tab[*nb_ptr] = elem;
-        memcpy(tab_ptr, &tab, sizeof(tab));
-    }, {
+        memcpy(tab_ptr, &tab, sizeof(tab)); }, {
         *nb_ptr = 0;
-        av_freep(tab_ptr);
-    });
+        av_freep(tab_ptr); });
 }
 
 void *av_dynarray2_add(void **tab_ptr, int *nb_ptr, size_t elem_size,
@@ -348,11 +350,9 @@ void *av_dynarray2_add(void **tab_ptr, int *nb_ptr, size_t elem_size,
         if (elem_data)
             memcpy(tab_elem_data, elem_data, elem_size);
         else if (CONFIG_MEMORY_POISONING)
-            memset(tab_elem_data, FF_MEMORY_POISON, elem_size);
-    }, {
+            memset(tab_elem_data, FF_MEMORY_POISON, elem_size); }, {
         av_freep(tab_ptr);
-        *nb_ptr = 0;
-    });
+        *nb_ptr = 0; });
     return tab_elem_data;
 }
 
@@ -362,13 +362,15 @@ static void fill16(uint8_t *dst, int len)
 
     v |= v << 16;
 
-    while (len >= 4) {
+    while (len >= 4)
+    {
         AV_WN32(dst, v);
         dst += 4;
         len -= 4;
     }
 
-    while (len--) {
+    while (len--)
+    {
         *dst = dst[-2];
         dst++;
     }
@@ -378,37 +380,41 @@ static void fill24(uint8_t *dst, int len)
 {
 #if HAVE_BIGENDIAN
     uint32_t v = AV_RB24(dst - 3);
-    uint32_t a = v << 8  | v >> 16;
+    uint32_t a = v << 8 | v >> 16;
     uint32_t b = v << 16 | v >> 8;
     uint32_t c = v << 24 | v;
 #else
     uint32_t v = AV_RL24(dst - 3);
-    uint32_t a = v       | v << 24;
-    uint32_t b = v >> 8  | v << 16;
+    uint32_t a = v | v << 24;
+    uint32_t b = v >> 8 | v << 16;
     uint32_t c = v >> 16 | v << 8;
 #endif
 
-    while (len >= 12) {
-        AV_WN32(dst,     a);
+    while (len >= 12)
+    {
+        AV_WN32(dst, a);
         AV_WN32(dst + 4, b);
         AV_WN32(dst + 8, c);
         dst += 12;
         len -= 12;
     }
 
-    if (len >= 4) {
+    if (len >= 4)
+    {
         AV_WN32(dst, a);
         dst += 4;
         len -= 4;
     }
 
-    if (len >= 4) {
+    if (len >= 4)
+    {
         AV_WN32(dst, b);
         dst += 4;
         len -= 4;
     }
 
-    while (len--) {
+    while (len--)
+    {
         *dst = dst[-3];
         dst++;
     }
@@ -419,24 +425,27 @@ static void fill32(uint8_t *dst, int len)
     uint32_t v = AV_RN32(dst - 4);
 
 #if HAVE_FAST_64BIT
-    uint64_t v2= v + ((uint64_t)v<<32);
-    while (len >= 32) {
-        AV_WN64(dst   , v2);
-        AV_WN64(dst+ 8, v2);
-        AV_WN64(dst+16, v2);
-        AV_WN64(dst+24, v2);
+    uint64_t v2 = v + ((uint64_t)v << 32);
+    while (len >= 32)
+    {
+        AV_WN64(dst, v2);
+        AV_WN64(dst + 8, v2);
+        AV_WN64(dst + 16, v2);
+        AV_WN64(dst + 24, v2);
         dst += 32;
         len -= 32;
     }
 #endif
 
-    while (len >= 4) {
+    while (len >= 4)
+    {
         AV_WN32(dst, v);
         dst += 4;
         len -= 4;
     }
 
-    while (len--) {
+    while (len--)
+    {
         *dst = dst[-4];
         dst++;
     }
@@ -448,40 +457,54 @@ void av_memcpy_backptr(uint8_t *dst, int back, int cnt)
     if (!back)
         return;
 
-    if (back == 1) {
+    if (back == 1)
+    {
         memset(dst, *src, cnt);
-    } else if (back == 2) {
+    }
+    else if (back == 2)
+    {
         fill16(dst, cnt);
-    } else if (back == 3) {
+    }
+    else if (back == 3)
+    {
         fill24(dst, cnt);
-    } else if (back == 4) {
+    }
+    else if (back == 4)
+    {
         fill32(dst, cnt);
-    } else {
-        if (cnt >= 16) {
+    }
+    else
+    {
+        if (cnt >= 16)
+        {
             int blocklen = back;
-            while (cnt > blocklen) {
+            while (cnt > blocklen)
+            {
                 memcpy(dst, src, blocklen);
-                dst       += blocklen;
-                cnt       -= blocklen;
+                dst += blocklen;
+                cnt -= blocklen;
                 blocklen <<= 1;
             }
             memcpy(dst, src, cnt);
             return;
         }
-        if (cnt >= 8) {
-            AV_COPY32U(dst,     src);
+        if (cnt >= 8)
+        {
+            AV_COPY32U(dst, src);
             AV_COPY32U(dst + 4, src + 4);
             src += 8;
             dst += 8;
             cnt -= 8;
         }
-        if (cnt >= 4) {
+        if (cnt >= 4)
+        {
             AV_COPY32U(dst, src);
             src += 4;
             dst += 4;
             cnt -= 4;
         }
-        if (cnt >= 2) {
+        if (cnt >= 2)
+        {
             AV_COPY16U(dst, src);
             src += 2;
             dst += 2;
@@ -503,7 +526,8 @@ void *av_fast_realloc(void *ptr, unsigned int *size, size_t min_size)
     /* *size is an unsigned, so the real maximum is <= UINT_MAX. */
     max_size = FFMIN(max_size, UINT_MAX);
 
-    if (min_size > max_size) {
+    if (min_size > max_size)
+    {
         *size = 0;
         return NULL;
     }
@@ -528,7 +552,8 @@ static inline void fast_malloc(void *ptr, unsigned int *size, size_t min_size, i
     void *val;
 
     memcpy(&val, ptr, sizeof(val));
-    if (min_size <= *size) {
+    if (min_size <= *size)
+    {
         av_assert0(val || !min_size);
         return;
     }
@@ -537,7 +562,8 @@ static inline void fast_malloc(void *ptr, unsigned int *size, size_t min_size, i
     /* *size is an unsigned, so the real maximum is <= UINT_MAX. */
     max_size = FFMIN(max_size, UINT_MAX);
 
-    if (min_size > max_size) {
+    if (min_size > max_size)
+    {
         av_freep(ptr);
         *size = 0;
         return;

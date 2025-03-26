@@ -26,7 +26,6 @@
 *.ptx.c
 *.ptx.gz
 *_g
-/.vscode
 \#*
 .\#*
 /.config

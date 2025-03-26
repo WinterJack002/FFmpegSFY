@@ -556,18 +556,6 @@ typedef struct H264Context {
     int ref2frm[MAX_SLICES][2][64];     ///< reference to frame number lists, used in the loop filter, the first 2 are for -2,-1
 } H264Context;
 
-#if gly_return 
-typedef struct ErrorCode{
-    unsigned int y;              // y坐标（低8位）
-    unsigned int x;              // x坐标（第9到16位）
-    unsigned int mb_type;        // 宏块类型（第17位）
-    unsigned int prediction_mode; // 预测模式（第18到22位）
-    unsigned int slice_type;     // slice类型（第23位）
-    unsigned int other_error;    // 其他检错（第24位）
-    unsigned int error_flag;    //是否有错
-} ErrorCode;
-#endif
-
 extern const uint16_t ff_h264_mb_sizes[4];
 
 /**
@@ -607,10 +595,7 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl);
  * @return 0 if OK, ER_AC_ERROR / ER_DC_ERROR / ER_MV_ERROR on error
  */
 int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl);
-#if gly_return
-int return_error_code(unsigned int y, unsigned int x, unsigned int mb_type,unsigned int prediction_mode, unsigned int slice_type, unsigned int other_error,int flag);
-void parse_return_code(int return_code, ErrorCode *ec);
-#endif
+
 void ff_h264_init_cabac_states(const H264Context *h, H264SliceContext *sl);
 
 void ff_h264_direct_dist_scale_factor(const H264Context *const h, H264SliceContext *sl);

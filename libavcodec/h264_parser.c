@@ -604,6 +604,7 @@ static int h264_parse(AVCodecParserContext *s,
         next = buf_size;
     } else {
         next = h264_find_frame_end(p, buf, buf_size, avctx);
+
         if (ff_combine_frame(pc, next, &buf, &buf_size) < 0) {
             *poutbuf      = NULL;
             *poutbuf_size = 0;

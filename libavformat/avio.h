@@ -319,9 +319,6 @@ typedef struct AVIOContext {
      * Read-only statistic of bytes written for this AVIOContext.
      */
     int64_t bytes_written;
-
-
-
 } AVIOContext;
 
 /**

@@ -580,7 +580,6 @@ static void debug_green_metadata(const H264SEIGreenMetaData *gm, void *logctx)
                    (float)gm->xsd_metric_value/100);
     }
 }
-
 // #if gly_erxy
 // int temp_error_x = -1;
 // int temp_error_y = -1;
@@ -588,7 +587,6 @@ static void debug_green_metadata(const H264SEIGreenMetaData *gm, void *logctx)
 // int pre_errory = -1;
 
 // #endif
-
 static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
 {
     AVCodecContext *const avctx = h->avctx;
@@ -655,7 +653,6 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
             idr_cleared = 1;
             h->has_recovery_point = 1;
 
-
 #if gly_erxy
             avctx->final_error_x = -1;
             avctx->final_error_y = -1;
@@ -669,7 +666,6 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
             // avctx->error_x = temp_error_x;
             // avctx->error_y = temp_error_y;
             // #endif
-
 
             if ((err = ff_h264_queue_decode_slice(h, nal))) {
                 H264SliceContext *sl = h->slice_ctx + h->nb_slice_ctx_queued;
@@ -765,12 +761,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
     }
 
     ret = ff_h264_execute_decode_slices(h);
-
     // #if gly_erxy
     // ax1 = temp_error_x;
     // ay1 = temp_error_y;
     // #endif
-
     if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
         goto end;
 
@@ -832,16 +826,13 @@ end:
             ff_h264_set_erpic(&h->er.next_pic, sl->ref_list[1][0].parent);
 
         ff_er_frame_end(&h->er, &decode_error_flags);
-
 #if gly_erxy
         // ax2 = temp_error_x;
         // ay2 = temp_error_y; 
-
         // if(ay2 < ay1 && ay2 != -1) {
         //     temp_error_x = ax1;
         //     temp_error_y = ay1;
         // }
-
 		// if(temp_error_y >=  pre_errory &&  pre_errory != -1){//之前的错误坐标更靠前
         //     temp_error_x = pre_errorx;
         //     temp_error_y = pre_errory;
@@ -860,7 +851,6 @@ end:
         h->avctx->prev_final_error_y = h->avctx->final_error_y;
 
 #endif
-
         if (decode_error_flags) {
             if (h->cur_pic_ptr->decode_error_flags) {
                 atomic_int *decode_error = (atomic_int*)h->cur_pic_ptr->decode_error_flags->data;
@@ -1083,7 +1073,6 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     H264Context *h     = avctx->priv_data;
     int buf_index;
     int ret;
-    printf("byte=%d,flag=%d\n",avctx->internal->buffer_pkt->er_byte,avctx->internal->buffer_pkt->er_flag);
 
     h->flags = avctx->flags;
     h->setup_finished = 0;

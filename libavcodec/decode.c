@@ -726,8 +726,6 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
         if (!AVPACKET_IS_EMPTY(avci->buffer_pkt))
             return AVERROR(EAGAIN);
         ret = av_packet_ref(avci->buffer_pkt, avpkt);
-
-
         if (ret < 0)
             return ret;
     } else
@@ -738,7 +736,6 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
         if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
             return ret;
     }
-    printf("byte=%d,flag=%d\n",avctx->internal->buffer_pkt->er_byte,avctx->internal->buffer_pkt->er_flag);
 
     return 0;
 }

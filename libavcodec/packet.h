@@ -311,7 +311,7 @@ enum AVPacketSideDataType {
 };
 
 #define AV_PKT_DATA_QUALITY_FACTOR AV_PKT_DATA_QUALITY_STATS //DEPRECATED
-
+#define gly_ts 1
 /**
  * This structure stores auxiliary information for decoding, presenting, or
  * otherwise processing the coded stream. It is typically exported by demuxers
@@ -533,6 +533,10 @@ typedef struct AVPacket {
      * or muxers.
      */
     AVRational time_base;
+    #if gly_ts
+    int er_byte;
+    int er_flag;
+    #endif
 } AVPacket;
 
 #if FF_API_INIT_PACKET

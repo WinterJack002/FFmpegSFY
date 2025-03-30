@@ -5024,7 +5024,111 @@ static av_always_inline void decode_cabac_luma_residual(const H264Context *h, H2
         }
     }
 }
+#if WINTER_MV_ERROR_CHECK
+// 辅助函数：计算邻居宏块与前一帧MV差异的平均值
+static int calculate_neighbor_mv_diff(const H264Context *h, H264SliceContext *sl,
+                                      int mb_x, int mb_y, int *avg_diff)
+{
+    /* ------ 计算当前块邻居块 MV 与前一帧同位块的差异 ------ */
+    int neighbor_count = 0;
+    int total_diff = 0;
 
+    // 邻居宏块坐标定义：左(A)、上(B)、右上(C)
+    const int neighbors[3][2] = {
+        {mb_x - 1, mb_y},    // 左邻
+        {mb_x, mb_y - 1},    // 上邻
+        {mb_x + 1, mb_y - 1} // 右上邻（需检查边界）
+    };
+
+    for (int i = 0; i < 3; i++)
+    {
+        const int nx = neighbors[i][0];
+        const int ny = neighbors[i][1];
+
+        // 检查邻居坐标是否合法
+        if (nx < 0 || ny < 0 || nx >= h->mb_width || ny >= h->mb_height)
+        {
+            continue;
+        }
+
+        const int neighbor_xy = nx + ny * h->mb_stride;
+
+        // 获取邻居宏块在当前帧的MV（假设存储在cur_mv中）
+        int cur_mv_x = h->cur_pic.motion_val[0][neighbor_xy][0];
+        int cur_mv_y = h->cur_pic.motion_val[0][neighbor_xy][1];
+
+        // 获取邻居宏块在前一帧同位位置的MV
+        int prev_mv_x = h->prev_mv[neighbor_xy][0];
+        int prev_mv_y = h->prev_mv[neighbor_xy][1];
+
+        // 仅处理有效MV
+        if (prev_mv_x != INT16_MAX && prev_mv_y != INT16_MAX)
+        {
+            int diff_x = abs(cur_mv_x - prev_mv_x);
+            int diff_y = abs(cur_mv_y - prev_mv_y);
+            total_diff += (diff_x + diff_y);
+            neighbor_count++;
+        }
+    }
+
+    if (neighbor_count == 0)
+        return -1;
+
+    *avg_diff = total_diff / neighbor_count;
+    return 0;
+
+    /* ------ 计算当前块 MV 与前一帧邻居块的差异
+        const int mb_xy = mb_x + mb_y * h->mb_stride;
+        int neighbor_count = 0;
+        int total_diff = 0;
+
+        // 左邻宏块 (A)
+        if (mb_x > 0)
+        {
+            const int left_xy = mb_xy - 1;
+            if (h->prev_mv[left_xy][0] != INT16_MAX)
+            { // 有效MV
+                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[left_xy][0]);
+                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[left_xy][1]);
+                total_diff += (diff_x + diff_y);
+                neighbor_count++;
+            }
+        }
+
+        // 上邻宏块 (B)
+        if (mb_y > 0)
+        {
+            const int top_xy = mb_xy - h->mb_stride;
+            if (h->prev_mv[top_xy][0] != INT16_MAX)
+            {
+                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[top_xy][0]);
+                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[top_xy][1]);
+                total_diff += (diff_x + diff_y);
+                neighbor_count++;
+            }
+        }
+
+        // 右上邻宏块 (C)
+        if (mb_y > 0 && mb_x < h->mb_width - 1)
+        {
+            const int top_right_xy = mb_xy - h->mb_stride + 1;
+            if (h->prev_mv[top_right_xy][0] != INT16_MAX)
+            {
+                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[top_right_xy][0]);
+                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[top_right_xy][1]);
+                total_diff += (diff_x + diff_y);
+                neighbor_count++;
+            }
+        }
+
+        if (neighbor_count == 0)
+            return -1; // 无可用的邻居数据
+
+        *avg_diff = total_diff / neighbor_count;
+        return 0;
+    */
+}
+#endif
 /**
  * Decode a macroblock.
  * @return 0 if OK, ER_AC_ERROR / ER_DC_ERROR / ER_MV_ERROR if an error is noticed
@@ -5033,16 +5137,23 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
 {
     const SPS *sps = h->ps.sps;
     int mb_xy;
-    int mb_type, partition_count, cbp = 0;
-    int dct8x8_allowed = h->ps.pps->transform_8x8_mode;
+    int mb_type, partition_count, cbp = 0; // partition_count 表示 当前宏块的分区数量，partition_count 由 mb_type 解析得到，决定了当前宏块的运动矢量数量及预测模式
+    /*帧间预测（Inter-prediction） 中，一个宏块（16x16 像素）可以被划分为 多个运动分区：
+    16×16（1 个分区）
+    16×8（2 个分区）
+    8×16（2 个分区）
+    8×8（4 个分区）*/
+    int dct8x8_allowed = h->ps.pps->transform_8x8_mode; // 是否允许 8×8 DTC 变换；只有在 High Profile 才支持 8×8 变换，Baseline 和 Main Profile 只能用 4×4 变换。
     const int decode_chroma = sps->chroma_format_idc == 1 || sps->chroma_format_idc == 2;
+    // 是否需要解码色度。chroma_format_idc == 0 → 只有 亮度（Luma），不需要解码 Chroma（黑白视频）
     const int pixel_shift = h->pixel_shift;
-
+    // pixel_shift：像素位深相关参数，8-bit 视频 → pixel_shift = 0
     mb_xy = sl->mb_xy = sl->mb_x + sl->mb_y * h->mb_stride;
 
     ff_tlog(h->avctx, "pic:%d mb:%d/%d\n", h->poc.frame_num, sl->mb_x, sl->mb_y);
-    if (sl->slice_type_nos != AV_PICTURE_TYPE_I)
-    {
+    printf("pic:%d mb:%d/%d\n", h->poc.frame_num, sl->mb_x, sl->mb_y);
+    if (sl->slice_type_nos != AV_PICTURE_TYPE_I) // 非 I 帧 检查是否是跳帧 skip
+    {                                            // 宏块是跳过的，则不需要显式存储运动矢量等数据，而是利用运动补偿从参考帧预测
         int skip;
         /* a skipped mb needs the aff flag from the following mb */
         if (FRAME_MBAFF(h) && (sl->mb_y & 1) == 1 && sl->prev_mb_skipped)
@@ -5060,26 +5171,41 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
                     sl->mb_mbaff = sl->mb_field_decoding_flag = decode_cabac_field_decoding_flag(h, sl);
             }
 
-            decode_mb_skip(h, sl);
+            decode_mb_skip(h, sl); // 调用 decode_mb_skip() 进行跳过的处理，主要是填充运动矢量、参考索引等信息
 
-            h->cbp_table[mb_xy] = 0;
-            h->chroma_pred_mode_table[mb_xy] = 0;
-            sl->last_qscale_diff = 0;
+            h->cbp_table[mb_xy] = 0;              // cbp_table[mb_xy] = 0; → 无 DCT 系数
+            h->chroma_pred_mode_table[mb_xy] = 0; //  色度预测模式置 0
+            sl->last_qscale_diff = 0;             //  跳过的宏块不需要调整量化步长
 
             return 0;
         }
     }
-    if (FRAME_MBAFF(h))
+    if (FRAME_MBAFF(h)) // 需要解析场解码标志
     {
         if ((sl->mb_y & 1) == 0)
             sl->mb_mbaff =
-                sl->mb_field_decoding_flag = decode_cabac_field_decoding_flag(h, sl);
+                sl->mb_field_decoding_flag = decode_cabac_field_decoding_flag(h, sl); // 解码该宏块是否以场模式进行解码
     }
-
+    // 处理邻近宏块信息
     sl->prev_mb_skipped = 0;
 
-    fill_decode_neighbors(h, sl, -(MB_FIELD(sl)));
+    fill_decode_neighbors(h, sl, -(MB_FIELD(sl))); // 该宏块是帧模式还是场模式，处理邻居宏块的坐标，得到邻居宏块的宏块类型。
+    // 从 sl 结构体中获取宏块的邻居信息，而 宏块的具体存储在 h->cur_pic 这个帧结构里。
+    /*sl->mb_x、sl->mb_y：当前宏块的 位置（宏块坐标）。
+    sl->mb_xy：当前宏块的 索引（线性数组下标）。
+    sl->ref_cache：参考帧索引缓存。
+    sl->mv_cache：运动矢量缓存。*/
 
+    /*h->cur_pic.mb_type[mb_xy]           // 记录当前宏块类型
+    h->cur_pic.ref_index[0][mb_xy]      // L0 参考帧索引
+    h->cur_pic.ref_index[1][mb_xy]      // L1 参考帧索引（B 帧）
+    h->cur_pic.motion_val[0][mb_xy]     // 运动矢量 L0        // 当前宏块前向参考帧的运动矢量
+    h->cur_pic.motion_val[1][mb_xy]     // 运动矢量 L1（B 帧） // 当前宏块后向参考帧的运动矢量
+    h->cur_pic.qscale_table[mb_xy]      // 量化参数*/
+
+    // 邻居宏块
+    //    B  C
+    // D  A [当前MB]
     if (sl->slice_type_nos == AV_PICTURE_TYPE_B)
     {
         int ctx = 0;
@@ -5133,10 +5259,10 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
     }
     else if (sl->slice_type_nos == AV_PICTURE_TYPE_P)
     {
-        if (get_cabac_noinline(&sl->cabac, &sl->cabac_state[14]) == 0)
+        if (get_cabac_noinline(&sl->cabac, &sl->cabac_state[14]) == 0) // 得到宏块类型和分区数，为了预测。返回 0 帧间预测宏块
         {
             /* P-type */
-            if (get_cabac_noinline(&sl->cabac, &sl->cabac_state[15]) == 0)
+            if (get_cabac_noinline(&sl->cabac, &sl->cabac_state[15]) == 0) // 返回 0 → 可能是 16×16 或 8×8 模式。返回 1 → 可能是 16×8 或 8×16 模式。
             {
                 /* P_L0_D16x16, P_8x8 */
                 mb_type = 3 * get_cabac_noinline(&sl->cabac, &sl->cabac_state[16]);
@@ -5146,31 +5272,31 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
                 /* P_L0_D8x16, P_L0_D16x8 */
                 mb_type = 2 - get_cabac_noinline(&sl->cabac, &sl->cabac_state[17]);
             }
-            partition_count = ff_h264_p_mb_type_info[mb_type].partition_count;
+            partition_count = ff_h264_p_mb_type_info[mb_type].partition_count; // 查表 mb_type 对应的 分区数量 和 最终的 H.264 宏块类型。partition_count 表示该 MB 需要多少个运动矢量。mb_type 最终转换为 H.264 宏块类型值。
             mb_type = ff_h264_p_mb_type_info[mb_type].type;
         }
         else
         {
-            mb_type = decode_cabac_intra_mb_type(sl, 17, 0);
+            mb_type = decode_cabac_intra_mb_type(sl, 17, 0); // 帧内宏块
             goto decode_intra_mb;
         }
     }
-    else
+    else // AV_PICTURE_TYPE_I （I 帧图片标识）
     {
-        mb_type = decode_cabac_intra_mb_type(sl, 3, 1);
+        mb_type = decode_cabac_intra_mb_type(sl, 3, 1); // 0：intra 4*4
         if (sl->slice_type == AV_PICTURE_TYPE_SI && mb_type)
-            mb_type--;
+            mb_type--; // 处理 SI 切片时，需要对 mb_type 进行特殊处理
         av_assert2(sl->slice_type_nos == AV_PICTURE_TYPE_I);
     decode_intra_mb:
         partition_count = 0;
-        cbp = ff_h264_i_mb_type_info[mb_type].cbp;
+        cbp = ff_h264_i_mb_type_info[mb_type].cbp; // cbp 是一个 8 位的值，每一位对应宏块内某个子块的编码状态，表示宏块内有多少个 非零 DCT 系数
         sl->intra16x16_pred_mode = ff_h264_i_mb_type_info[mb_type].pred_mode;
         mb_type = ff_h264_i_mb_type_info[mb_type].type;
     }
     if (MB_FIELD(sl))
         mb_type |= MB_TYPE_INTERLACED;
 
-    h->slice_table[mb_xy] = sl->slice_num;
+    h->slice_table[mb_xy] = sl->slice_num; // 记录当前宏块所属的切片编号
 
     if (IS_INTRA_PCM(mb_type))
     {
@@ -5213,8 +5339,8 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
         sl->last_qscale_diff = 0;
         return 0;
     }
-
-    fill_decode_caches(h, sl, mb_type);
+    /* 在解码当前宏块（MB，Macroblock）时，填充解码所需的缓存（cache），主要是用于运动矢量预测和帧间预测 */
+    fill_decode_caches(h, sl, mb_type); // 负责填充与解码过程直接相关的缓存数据，涉及到预测模式、非零系数缓存等，是在解码过程中实际使用的数据准备
 
     if (IS_INTRA(mb_type))
     {
@@ -5233,10 +5359,10 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
             }
             else
             {
-                for (i = 0; i < 16; i++)
+                for (i = 0; i < 16; i++) // 解码并存储当前宏块的 4×4 子块的帧内预测模式
                 {
                     int pred = pred_intra_mode(h, sl, i);
-                    sl->intra4x4_pred_mode_cache[scan8[i]] = decode_cabac_mb_intra4x4_pred_mode(sl, pred);
+                    sl->intra4x4_pred_mode_cache[scan8[i]] = decode_cabac_mb_intra4x4_pred_mode(sl, pred); // 通过 CABAC 译码 得到该小块的真实帧内预测模式，并存入 sl->intra4x4_pred_mode_cache
 
                     ff_tlog(h->avctx, "i4x4 pred=%d mode=%d\n", pred,
                             sl->intra4x4_pred_mode_cache[scan8[i]]);
@@ -5557,6 +5683,46 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
     {
         h->chroma_pred_mode_table[mb_xy] = 0;
         write_back_motion(h, sl, mb_type);
+
+#if WINTER_MV_ERROR_CHECK
+        /*
+         * 取 16*16 MV 的第一个:
+         *   |
+         * --+--------------
+         *   | 0 0 0 0 0 0 0 0
+         *   | 0 0 0 0 |v| v v v
+         *   | 0 0 0 0  v  v v v
+         *   | 0 0 0 0  v  v v v
+         *   | 0 0 0 0  v  v v v
+         */
+        int current_mv_x = sl->mv_cache[0][scan8[0]][0];
+        int current_mv_y = sl->mv_cache[0][scan8[0]][1];
+
+        // 计算当前MV与前一帧同位MV的差异
+        int prev_mv_x = h->prev_mv[mb_xy][0];
+        int prev_mv_y = h->prev_mv[mb_xy][1];
+        int current_diff = abs(current_mv_x - prev_mv_x) + abs(current_mv_y - prev_mv_y);
+
+        // 计算邻居宏块的平均差异
+        int neighbor_avg_diff = 0;
+        if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
+        {
+            // 异常判断：当前差异 > 5倍邻居平均差异 且 绝对值超过最小阈值
+            if (neighbor_avg_diff > 0 &&
+                current_diff > 5 * neighbor_avg_diff &&
+                current_diff > 16) // 防止小幅度运动误报
+            {
+                h->error_mb_map[mb_xy] = 1; // 标记错误宏块
+                av_log(h->avctx, AV_LOG_WARNING,
+                       "MV anomaly detected at (%d,%d): curr_diff=%d, neighbor_avg=%d\n",
+                       sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff);
+            }
+        }
+
+        // 更新前一帧MV缓存（使用宏块中心4x4块的MV代表整个宏块）
+        h->prev_mv[mb_xy][0] = current_mv_x;
+        h->prev_mv[mb_xy][1] = current_mv_y;
+#endif
     }
 
     if (!IS_INTRA16x16(mb_type))
@@ -5768,6 +5934,36 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
 
     h->cur_pic.qscale_table[mb_xy] = sl->qscale;
     write_back_non_zero_count(h, sl);
+
+    // 运动矢量异常检测逻辑（仅在INTER模式下生效）
+    // if (IS_INTER(mb_type)) {
+    //     int current_mv_x = sl->mv_cache[0][scan8[0]][0];
+    //     int current_mv_y = sl->mv_cache[0][scan8[0]][1];
+
+    //     // 计算当前MV与前一帧同位MV的差异
+    //     int prev_mv_x = h->prev_mv[mb_xy][0];
+    //     int prev_mv_y = h->prev_mv[mb_xy][1];
+    //     int current_diff = abs(current_mv_x - prev_mv_x) + abs(current_mv_y - prev_mv_y);
+
+    //     // 计算邻居宏块的平均差异
+    //     int neighbor_avg_diff = 0;
+    //     if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0) {
+    //         // 异常判断：当前差异 > 5倍邻居平均差异 且 绝对值超过最小阈值
+    //         if (neighbor_avg_diff > 0 &&
+    //             current_diff > 5 * neighbor_avg_diff &&
+    //             current_diff > 16) // 防止小幅度运动误报
+    //         {
+    //             h->error_mb_map[mb_xy] = 1; // 标记错误宏块
+    //             av_log(h->avctx, AV_LOG_WARNING,
+    //                    "MV anomaly detected at (%d,%d): curr_diff=%d, neighbor_avg=%d\n",
+    //                    sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff);
+    //         }
+    //     }
+
+    //     // 更新前一帧MV缓存（使用宏块中心4x4块的MV代表整个宏块）
+    //     h->prev_mv[mb_xy][0] = current_mv_x;
+    //     h->prev_mv[mb_xy][1] = current_mv_y;
+    // }
 
     return 0;
 }

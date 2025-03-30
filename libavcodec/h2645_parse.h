@@ -29,9 +29,10 @@
 #include "codec_id.h"
 #include "get_bits.h"
 
-#define MAX_MBPAIR_SIZE (256*1024) // a tighter bound could be calculated if someone cares about a few bytes
+#define MAX_MBPAIR_SIZE (256 * 1024) // a tighter bound could be calculated if someone cares about a few bytes
 
-typedef struct H2645NAL {
+typedef struct H2645NAL
+{
     const uint8_t *data;
     int size;
 
@@ -54,7 +55,7 @@ typedef struct H2645NAL {
     /**
      * H.264 only, nal_ref_idc
      */
-    int ref_idc;
+    int ref_idc; // // 优先级参考帧。表示该 NALU 的重要性；0 表示不用于被参考，表示该 NALU 不重要。IDR NALU 的 nal_ref_idc 值为 3。
 
     /**
      * HEVC only, nuh_temporal_id_plus_1 - 1
@@ -71,7 +72,8 @@ typedef struct H2645NAL {
     int *skipped_bytes_pos;
 } H2645NAL;
 
-typedef struct H2645RBSP {
+typedef struct H2645RBSP
+{
     uint8_t *rbsp_buffer;
     AVBufferRef *rbsp_buffer_ref;
     int rbsp_buffer_alloc_size;
@@ -79,7 +81,8 @@ typedef struct H2645RBSP {
 } H2645RBSP;
 
 /* an input packet split into unescaped NAL units */
-typedef struct H2645Packet {
+typedef struct H2645Packet
+{
     H2645NAL *nals;
     H2645RBSP rbsp;
     int nb_nals;
@@ -121,14 +124,16 @@ static inline int get_nalsize(int nal_length_size, const uint8_t *buf,
 {
     int i, nalsize = 0;
 
-    if (*buf_index >= buf_size - nal_length_size) {
+    if (*buf_index >= buf_size - nal_length_size)
+    {
         // the end of the buffer is reached, refill it
         return AVERROR_INVALIDDATA;
     }
 
     for (i = 0; i < nal_length_size; i++)
         nalsize = ((unsigned)nalsize << 8) | buf[(*buf_index)++];
-    if (nalsize <= 0 || nalsize > buf_size - *buf_index) {
+    if (nalsize <= 0 || nalsize > buf_size - *buf_index)
+    {
         av_log(logctx, AV_LOG_ERROR,
                "Invalid NAL unit size (%d > %d).\n", nalsize, buf_size - *buf_index);
         return AVERROR_INVALIDDATA;

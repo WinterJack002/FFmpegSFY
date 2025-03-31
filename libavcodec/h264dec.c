@@ -393,17 +393,24 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
 {
     H264Context *h = avctx->priv_data;
 #if WINTER_MV_ERROR_CHECK
-    // 分配 prev_mv 和 error_mb_map
-    h->prev_mv = av_malloc_array(h->mb_stride * h->mb_height, sizeof(*h->prev_mv));
-    h->error_mb_map = av_malloc(h->mb_stride * h->mb_height);
-
-    // 检查分配是否成功
-    if (!h->prev_mv || !h->error_mb_map)
+    // 分配错误宏块地图
+    h->error_mb_stride = h->mb_stride;
+    h->error_mb_map = av_mallocz(h->mb_stride * h->mb_height);
+    if (!h->error_mb_map)
     {
-        av_freep(&h->prev_mv);
-        av_freep(&h->error_mb_map);
         return AVERROR(ENOMEM);
     }
+    // // 分配 prev_mv 和 error_mb_map
+    // h->prev_mv = av_malloc_array(h->mb_stride * h->mb_height, sizeof(*h->prev_mv));
+    // h->error_mb_map = av_malloc(h->mb_stride * h->mb_height);
+
+    // // 检查分配是否成功
+    // if (!h->prev_mv || !h->error_mb_map)
+    // {
+    //     av_freep(&h->prev_mv);
+    //     av_freep(&h->error_mb_map);
+    //     return AVERROR(ENOMEM);
+    // }
 #endif
     int ret;
 
@@ -1092,26 +1099,38 @@ static int send_next_delayed_frame(H264Context *h, AVFrame *dst_frame,
     return buf_index;
 }
 
-#if WINTER_MV_ERROR_CHECK
-// 在帧解码初始化时重置prev_mv（需在解码器合适位置调用）
-static void reset_prev_mv(H264Context *h)
-{
-    for (int i = 0; i < h->mb_stride * h->mb_height; i++)
-    {
-        h->prev_mv[i][0] = INT16_MAX; // 用特殊值标记无效
-        h->prev_mv[i][1] = INT16_MAX;
-    }
-}
-#endif
+// #if WINTER_MV_ERROR_CHECK
+// // 在帧解码初始化时重置prev_mv（需在解码器合适位置调用）
+// static void reset_prev_mv(H264Context *h)
+// {
+//     for (int i = 0; i < h->mb_stride * h->mb_height; i++)
+//     {
+//         h->prev_mv[i][0] = INT16_MAX; // 用特殊值标记无效
+//         h->prev_mv[i][1] = INT16_MAX;
+//     }
+// }
+// #endif
 
 static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                              int *got_frame, AVPacket *avpkt)
 {
+
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     H264Context *h = avctx->priv_data;
     int buf_index;
     int ret;
+
+#if WINTER_MV_ERROR_CHECK
+    // 每帧开始时清空错误地图
+    if (h->error_mb_map)
+    {
+        memset(h->error_mb_map, 0, h->mb_stride * h->mb_height);
+    }
+    // 每帧开始时重置 prev_mv 和 error_mb_map
+    // reset_prev_mv(h);
+    // memset(h->error_mb_map, 0, h->mb_stride * h->mb_height);
+#endif
 
     h->flags = avctx->flags;
     h->setup_finished = 0;
@@ -1138,11 +1157,7 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                                             &h->ps, &h->is_avc, &h->nal_length_size,
                                             avctx->err_recognition, avctx);
     }
-#if WINTER_MV_ERROR_CHECK
-    // 每帧开始时重置 prev_mv 和 error_mb_map
-    reset_prev_mv(h);
-    memset(h->error_mb_map, 0, h->mb_stride * h->mb_height);
-#endif
+
     buf_index = decode_nal_units(h, buf, buf_size);
     if (buf_index < 0)
         return AVERROR_INVALIDDATA;

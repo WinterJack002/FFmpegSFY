@@ -390,7 +390,7 @@ static void update_av_program_info(AVFormatContext *s, unsigned int programid,
  * @return 1 if the pid is only comprised in programs that have .discard=AVDISCARD_ALL
  *         0 otherwise
  */
-static int discard_pid(MpegTSContext *ts, unsigned int pid)
+static int discard_pid(MpegTSContext *ts, unsigned int pid) // 判断给定的 PID（Packet ID）是否应该被丢弃
 {
     int i, j, k;
     int used = 0, discarded = 0;
@@ -401,7 +401,7 @@ static int discard_pid(MpegTSContext *ts, unsigned int pid)
 
     /* If none of the programs have .discard=AVDISCARD_ALL then there's
      * no way we have to discard this packet */
-    for (k = 0; k < ts->stream->nb_programs; k++)
+    for (k = 0; k < ts->stream->nb_programs; k++) // 如果没有任何节目的 discard 标志是 AVDISCARD_ALL
         if (ts->stream->programs[k]->discard == AVDISCARD_ALL)
             break;
     if (k == ts->stream->nb_programs)
@@ -428,7 +428,7 @@ static int discard_pid(MpegTSContext *ts, unsigned int pid)
         }
     }
 
-    return !used && discarded;
+    return !used && discarded; // pid 未被任何节目使用（used == 0）且至少被一个节目丢弃（discarded > 0），则返回 1（丢弃）。
 }
 
 /**
@@ -3122,7 +3122,7 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
         if (is_start)
         {
             /* pointer field present */
-            len = *p++;
+            len = *p++; // pointer_field 之后有多少个字节需要跳过，才能到达 TS 包载荷中第一个 Section 的起始位置, 如 | TS Header | payload_unit_start_indicator = 1 | pointer_field = 0x00 | Section 数据开始 |
             if (len > p_end - p)
                 return 0;
             if (len && cc_ok)
@@ -3138,7 +3138,7 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
             if (p < p_end)
             {
                 write_section_data(ts, tss,
-                                   p, p_end - p, 1);
+                                   p, p_end - p, 1); // 进入 av_malloc(size_t size) ？？
             }
         }
         else
@@ -3146,7 +3146,7 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet, int64_t pos)
             if (cc_ok)
             {
                 write_section_data(ts, tss,
-                                   p, p_end - p, 0);
+                                   p, p_end - p, 0); // std_
             }
         }
 

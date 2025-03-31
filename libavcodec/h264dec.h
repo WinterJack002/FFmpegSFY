@@ -570,9 +570,9 @@ typedef struct H264Context
     AVBufferPool *decode_error_flags_pool;
     int ref2frm[MAX_SLICES][2][64]; ///< reference to frame number lists, used in the loop filter, the first 2 are for -2,-1
 #if WINTER_MV_ERROR_CHECK
-    int16_t (*prev_mv)[2]; // 存储前一帧每个宏块的MV [list][mv]
+    // int16_t (*prev_mv)[2]; // 存储前一帧每个宏块的MV [list][mv]
     uint8_t *error_mb_map; // 错误宏块标记位图
-    int prev_mb_stride;    // 前一帧宏块步长
+    int error_mb_stride;   // 前一帧宏块步长
 #endif
 } H264Context;
 

@@ -1107,11 +1107,16 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     {
         int needed_size = h->mb_stride * h->mb_height;
         // 检查是否需要重新分配
-        if (!h->error_mb_map || h->error_mb_stride != h->mb_stride ||
-            (h->error_mb_stride * h->mb_height) < needed_size)
+        if (!h->error_mb_map ||
+            h->error_mb_stride != h->mb_stride ||
+            h->prev_mb_width != h->mb_width || // 新增：检查宽度变化
+            h->prev_mb_height != h->mb_height  // 新增：检查高度变化
+        )
         {
             av_freep(&h->error_mb_map);
             h->error_mb_stride = h->mb_stride;
+            h->prev_mb_width = h->mb_width; // 记录当前分辨率
+            h->prev_mb_height = h->mb_height;
             h->error_mb_map = av_mallocz(needed_size);
             if (!h->error_mb_map)
             {
@@ -1192,15 +1197,21 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
 
 #if WINTER_MV_ERROR_CHECK
     // ---------- 输出错误宏块坐标（调试用）----------
-    for (int y = 0; y < h->mb_height; y++)
-    {
-        for (int x = 0; x < h->mb_width; x++)
+    if (h->error_mb_map)
+    { // 确保指针有效
+        for (int y = 0; y < h->mb_height; y++)
         {
-            const int mb_xy = x + y * h->mb_stride;
-            if (h->error_mb_map[mb_xy])
+            for (int x = 0; x < h->mb_width; x++)
             {
-                av_log(avctx, AV_LOG_WARNING,
-                       "Error MB detected at (%d,%d)\n", x, y);
+                const int mb_xy = x + y * h->mb_stride;
+                if (mb_xy < h->mb_stride * h->mb_height)
+                { // 确保索引不越界
+                    if (h->error_mb_map[mb_xy])
+                    {
+                        av_log(avctx, AV_LOG_WARNING,
+                               "Error MB detected at (%d,%d)\n", x, y);
+                    }
+                }
             }
         }
     }

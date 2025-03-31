@@ -573,6 +573,8 @@ typedef struct H264Context
     // int16_t (*prev_mv)[2]; // 存储前一帧每个宏块的MV [list][mv]
     uint8_t *error_mb_map; // 错误宏块标记位图
     int error_mb_stride;   // 前一帧宏块步长
+    int prev_mb_width;     // 新增记录 SPS 分辨率是否变化
+    int prev_mb_height;    //
 #endif
 } H264Context;
 

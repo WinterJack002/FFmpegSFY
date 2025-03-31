@@ -5693,6 +5693,8 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
         int neighbor_avg_diff = 0;
         if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
         {
+            printf("current_diff:%d\n", current_diff);
+            printf("neighbor_avg_diff:%d\n", neighbor_avg_diff);
             // 异常判断：差异超过5倍平均值且绝对值阈值
             const int threshold = FFMAX(16, 5 * neighbor_avg_diff);
             if (current_diff > threshold)

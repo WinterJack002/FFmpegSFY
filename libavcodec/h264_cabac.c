@@ -5096,104 +5096,6 @@ static int calculate_neighbor_mv_diff(const H264Context *h, H264SliceContext *sl
 
     *avg_diff = total_diff / neighbor_count;
     return 0;
-    // /* ------ 计算当前块邻居块 MV 与前一帧同位块的差异 ------ */
-    // int neighbor_count = 0;
-    // int total_diff = 0;
-
-    // // 邻居宏块坐标定义：左(A)、上(B)、右上(C)
-    // const int neighbors[3][2] = {
-    //     {mb_x - 1, mb_y},    // 左邻
-    //     {mb_x, mb_y - 1},    // 上邻
-    //     {mb_x + 1, mb_y - 1} // 右上邻（需检查边界）
-    // };
-
-    // for (int i = 0; i < 3; i++)
-    // {
-    //     const int nx = neighbors[i][0];
-    //     const int ny = neighbors[i][1];
-
-    //     // 检查邻居坐标是否合法
-    //     if (nx < 0 || ny < 0 || nx >= h->mb_width || ny >= h->mb_height)
-    //     {
-    //         continue;
-    //     }
-
-    //     const int neighbor_xy = nx + ny * h->mb_stride;
-
-    //     // 获取邻居宏块在当前帧的MV（假设存储在cur_mv中）
-    //     int cur_mv_x = h->cur_pic.motion_val[0][neighbor_xy][0];
-    //     int cur_mv_y = h->cur_pic.motion_val[0][neighbor_xy][1];
-
-    //     // 获取邻居宏块在前一帧同位位置的MV
-    //     int prev_mv_x = h->prev_mv[neighbor_xy][0];
-    //     int prev_mv_y = h->prev_mv[neighbor_xy][1];
-
-    //     // 仅处理有效MV
-    //     if (prev_mv_x != INT16_MAX && prev_mv_y != INT16_MAX)
-    //     {
-    //         int diff_x = abs(cur_mv_x - prev_mv_x);
-    //         int diff_y = abs(cur_mv_y - prev_mv_y);
-    //         total_diff += (diff_x + diff_y);
-    //         neighbor_count++;
-    //     }
-    // }
-
-    // if (neighbor_count == 0)
-    //     return -1;
-
-    // *avg_diff = total_diff / neighbor_count;
-    // return 0;
-
-    /* ------ 计算当前块 MV 与前一帧邻居块的差异
-        const int mb_xy = mb_x + mb_y * h->mb_stride;
-        int neighbor_count = 0;
-        int total_diff = 0;
-
-        // 左邻宏块 (A)
-        if (mb_x > 0)
-        {
-            const int left_xy = mb_xy - 1;
-            if (h->prev_mv[left_xy][0] != INT16_MAX)
-            { // 有效MV
-                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[left_xy][0]);
-                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[left_xy][1]);
-                total_diff += (diff_x + diff_y);
-                neighbor_count++;
-            }
-        }
-
-        // 上邻宏块 (B)
-        if (mb_y > 0)
-        {
-            const int top_xy = mb_xy - h->mb_stride;
-            if (h->prev_mv[top_xy][0] != INT16_MAX)
-            {
-                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[top_xy][0]);
-                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[top_xy][1]);
-                total_diff += (diff_x + diff_y);
-                neighbor_count++;
-            }
-        }
-
-        // 右上邻宏块 (C)
-        if (mb_y > 0 && mb_x < h->mb_width - 1)
-        {
-            const int top_right_xy = mb_xy - h->mb_stride + 1;
-            if (h->prev_mv[top_right_xy][0] != INT16_MAX)
-            {
-                int diff_x = abs(sl->mv_cache[0][scan8[0]][0] - h->prev_mv[top_right_xy][0]);
-                int diff_y = abs(sl->mv_cache[0][scan8[0]][1] - h->prev_mv[top_right_xy][1]);
-                total_diff += (diff_x + diff_y);
-                neighbor_count++;
-            }
-        }
-
-        if (neighbor_count == 0)
-            return -1; // 无可用的邻居数据
-
-        *avg_diff = total_diff / neighbor_count;
-        return 0;
-    */
 }
 #endif
 /**
@@ -5763,6 +5665,13 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
          *   | 0 0 0 0  v  v v v
          */
         // 获取当前宏块中心4x4子块MV
+
+        if (!h->error_mb_map)
+        {
+            // 若未分配，跳过检查
+            return 0;
+        }
+
         const int scan_idx = scan8[0]; // 宏块左上角第一个4x4子块
         int current_mv_x = sl->mv_cache[0][scan_idx][0];
         int current_mv_y = sl->mv_cache[0][scan_idx][1];

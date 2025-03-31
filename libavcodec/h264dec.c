@@ -392,26 +392,6 @@ static AVOnce h264_vlc_init = AV_ONCE_INIT;
 static av_cold int h264_decode_init(AVCodecContext *avctx)
 {
     H264Context *h = avctx->priv_data;
-#if WINTER_MV_ERROR_CHECK
-    // 分配错误宏块地图
-    h->error_mb_stride = h->mb_stride;
-    h->error_mb_map = av_mallocz(h->mb_stride * h->mb_height);
-    if (!h->error_mb_map)
-    {
-        return AVERROR(ENOMEM);
-    }
-    // // 分配 prev_mv 和 error_mb_map
-    // h->prev_mv = av_malloc_array(h->mb_stride * h->mb_height, sizeof(*h->prev_mv));
-    // h->error_mb_map = av_malloc(h->mb_stride * h->mb_height);
-
-    // // 检查分配是否成功
-    // if (!h->prev_mv || !h->error_mb_map)
-    // {
-    //     av_freep(&h->prev_mv);
-    //     av_freep(&h->error_mb_map);
-    //     return AVERROR(ENOMEM);
-    // }
-#endif
     int ret;
 
     ret = h264_init_context(avctx, h);
@@ -1122,14 +1102,30 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     int ret;
 
 #if WINTER_MV_ERROR_CHECK
-    // 每帧开始时清空错误地图
-    if (h->error_mb_map)
+    // 确保mb_stride和mb_height有效后分配error_mb_map
+    if (h->mb_width > 0 && h->mb_height > 0)
     {
-        memset(h->error_mb_map, 0, h->mb_stride * h->mb_height);
+        int needed_size = h->mb_stride * h->mb_height;
+        // 检查是否需要重新分配
+        if (!h->error_mb_map || h->error_mb_stride != h->mb_stride ||
+            (h->error_mb_stride * h->mb_height) < needed_size)
+        {
+            av_freep(&h->error_mb_map);
+            h->error_mb_stride = h->mb_stride;
+            h->error_mb_map = av_mallocz(needed_size);
+            if (!h->error_mb_map)
+            {
+                return AVERROR(ENOMEM);
+            }
+        }
+        // 清空当前帧的错误地图
+        memset(h->error_mb_map, 0, needed_size);
     }
-    // 每帧开始时重置 prev_mv 和 error_mb_map
-    // reset_prev_mv(h);
-    // memset(h->error_mb_map, 0, h->mb_stride * h->mb_height);
+    else
+    {
+        // 如果参数未初始化，跳过错误检查
+        h->error_mb_map = NULL;
+    }
 #endif
 
     h->flags = avctx->flags;

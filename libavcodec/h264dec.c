@@ -54,6 +54,8 @@
 #include "thread.h"
 #include "threadframe.h"
 
+#include <libavutil/avutil.h>
+
 const uint16_t ff_h264_mb_sizes[4] = {256, 384, 512, 768};
 
 int avpriv_h264_has_num_reorder_frames(AVCodecContext *avctx)
@@ -136,8 +138,28 @@ void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl,
                                y, h->picture_structure, height);
     }
 }
+/* ----------   ff_h264_free_tables(H264Context *h) 清理工作：
 
-void ff_h264_free_tables(H264Context *h)
+    4x4 预测模式表 (intra4x4_pred_mode)
+    色度预测模式表 (chroma_pred_mode_table)
+    码块模式表 (cbp_table)
+    运动向量差值表 (mvd_table)
+    直接模式标志表 (direct_table)
+    非零系数表 (non_zero_count)
+    Slice 切片表 (slice_table_base)
+    MB 坐标映射表 (mb2b_xy, mb2br_xy)
+    量化步长、宏块类型、运动矢量等的内存池（av_buffer_pool_uninit 释放）
+
+如果启用了 CONFIG_ERROR_RESILIENCE，它还会释放错误恢复所需的额外表，如：
+
+    er.mb_index2xy
+    er.error_status_table
+    er.er_temp_buffer
+    dc_val_base
+
+此外，还会清理 slice_ctx 数组中的 bipred_scratchpad、edge_emu_buffer、top_borders 等缓冲区。
+*/
+void ff_h264_free_tables(H264Context *h) // 释放 H264Context 结构体中用于存储各种表（tables）的动态分配内存
 {
     int i;
 
@@ -348,9 +370,9 @@ static int h264_init_context(AVCodecContext *avctx, H264Context *h)
     return 0;
 }
 
-static void h264_free_pic(H264Context *h, H264Picture *pic)
+static void h264_free_pic(H264Context *h, H264Picture *pic) // 释放 H264Picture 结构体（表示解码帧）的相关资源
 {
-    ff_h264_unref_picture(pic);
+    ff_h264_unref_picture(pic); // 解除 H264Picture 结构体对 AVFrame 和其他缓冲区的引用
     av_frame_free(&pic->f);
     av_frame_free(&pic->f_grain);
 }
@@ -359,6 +381,16 @@ static av_cold int h264_decode_end(AVCodecContext *avctx)
 {
     H264Context *h = avctx->priv_data;
     int i;
+
+#if WINTER_MV_ERROR_CHECK
+    if (h->error_log_fp)
+    {
+        fprintf(h->error_log_fp, "\n]"); // 结束JSON数组
+        fclose(h->error_log_fp);
+        h->error_log_fp = NULL;
+    }
+    av_freep(&h->error_mb_map);
+#endif
 
     ff_h264_remove_all_refs(h);
     ff_h264_free_tables(h);
@@ -404,6 +436,53 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "pthread_once has failed.");
         return AVERROR_UNKNOWN;
     }
+
+#if WINTER_MV_ERROR_CHECK
+    // 打开错误日志文件（追加模式）
+    const char *log_path = "./mb_errors.json";
+
+    // 创建目录（递归创建多级目录）
+    // if (avpriv_io_mkdir("C:/h264_mv_errors", 0755) < 0)
+    // {
+    //     av_log(avctx, AV_LOG_ERROR, "无法创建目录: C:/h264_mv_errors\n");
+    //     return AVERROR(EIO);
+    // }
+
+    h->error_log_fp = fopen(log_path, "a");
+    if (!h->error_log_fp)
+    {
+        av_log(avctx, AV_LOG_ERROR, "无法打开错误日志文件: %s\n", log_path);
+        return AVERROR(EIO);
+    }
+    // 初始化CSV文件
+    h->current_diff_csv_fp = fopen("current_diff.csv", "w");
+    h->neighbor_diff_csv_fp = fopen("neighbor_diff.csv", "w");
+    if (!h->current_diff_csv_fp || !h->neighbor_diff_csv_fp)
+    {
+        av_log(avctx, AV_LOG_ERROR, "无法打开CSV文件!\n");
+        return AVERROR(EIO);
+    }
+
+    h->json_frame_num = 0;
+    h->csv_frame_num = 0;
+    // 写入JSON文件头（如果是新文件）
+    // fprintf(h->error_log_fp, "[\n"); // 开始JSON数组
+    // 检查文件是否为空，写入 JSON 头
+    if (fseek(h->error_log_fp, 0, SEEK_END) == 0)
+    {
+        if (ftell(h->error_log_fp) == 0)
+        {
+            fprintf(h->error_log_fp, "[\n");
+        }
+    }
+
+    // 写入CSV表头
+    // fprintf(h->mv_diff_csv_fp, "frame,mb_x,mb_y,current_diff,neighbor_avg_diff\n");
+
+    h->current_diff_map = NULL;
+    h->neighbor_diff_map = NULL;
+    h->map_allocated_size = 0;
+#endif
 
 #if FF_API_TICKS_PER_FRAME
     FF_DISABLE_DEPRECATION_WARNINGS
@@ -1195,27 +1274,97 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
 
     av_assert0(pict->buf[0] || !*got_frame);
 
+    // #if WINTER_MV_ERROR_CHECK
+    //     // ---------- 输出错误宏块坐标（调试用）----------
+    //     if (h->error_mb_map)
+    //     { // 确保指针有效
+    //         for (int y = 0; y < h->mb_height; y++)
+    //         {
+    //             for (int x = 0; x < h->mb_width; x++)
+    //             {
+    //                 const int mb_xy = x + y * h->mb_stride;
+    //                 if (mb_xy < h->mb_stride * h->mb_height)
+    //                 { // 确保索引不越界
+    //                     if (h->error_mb_map[mb_xy])
+    //                     {
+    //                         av_log(avctx, AV_LOG_WARNING,
+    //                                "Error MB detected at (%d,%d)\n", x, y);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // #endif
+
 #if WINTER_MV_ERROR_CHECK
-    // ---------- 输出错误宏块坐标（调试用）----------
-    if (h->error_mb_map)
-    { // 确保指针有效
+    // ---------- 输出错误宏块到JSON文件 ----------
+    if (h->error_mb_map && h->error_log_fp)
+    {
+        fprintf(h->error_log_fp, "%s\n", (h->json_frame_num == 0) ? "{" : ",\n{"); // 分隔帧
+        fprintf(h->error_log_fp, "\t\"frame_num\": %d,\n", h->json_frame_num);
+        fprintf(h->error_log_fp, "\t\"pts\": %" PRId64 ",\n", avpkt->pts);
+        fprintf(h->error_log_fp, "\t\"error_blocks\": [\n");
+
+        int first_error = 1;
         for (int y = 0; y < h->mb_height; y++)
         {
             for (int x = 0; x < h->mb_width; x++)
             {
                 const int mb_xy = x + y * h->mb_stride;
-                if (mb_xy < h->mb_stride * h->mb_height)
-                { // 确保索引不越界
-                    if (h->error_mb_map[mb_xy])
-                    {
-                        av_log(avctx, AV_LOG_WARNING,
-                               "Error MB detected at (%d,%d)\n", x, y);
-                    }
+                if (mb_xy < h->mb_stride * h->mb_height && h->error_mb_map[mb_xy])
+                {
+                    fprintf(h->error_log_fp, "%s\n\t\t{ \"x\": %d, \"y\": %d }",
+                            first_error ? "" : ",", x, y);
+                    first_error = 0;
                 }
             }
         }
+        fprintf(h->error_log_fp, "\n\t]\n}");
+        h->json_frame_num++;
+        fflush(h->error_log_fp); // 确保及时写入
     }
+
+    // if (h->current_frame_num > 7)
+    //     exit(1);
+
+    if (h->current_diff_map && h->neighbor_diff_map)
+    {
+        // 写入current_diff矩阵
+        for (int x = 0; x < h->mb_width; x++)
+        { // 行=mb_x
+            for (int y = 0; y < h->mb_height; y++)
+            { // 列=mb_y
+                const int mb_idx = x + y * h->mb_width;
+                fprintf(h->current_diff_csv_fp, "%d%s",
+                        h->current_diff_map[mb_idx],
+                        (y == h->mb_height - 1) ? "" : ","); // 行尾不加逗号
+            }
+            fprintf(h->current_diff_csv_fp, "\n"); // 换行
+        }
+        fprintf(h->current_diff_csv_fp, "\n"); // 帧间空行
+
+        // 写入neighbor_diff矩阵（格式相同）
+        for (int x = 0; x < h->mb_width; x++)
+        {
+            for (int y = 0; y < h->mb_height; y++)
+            {
+                const int mb_idx = x + y * h->mb_width;
+                fprintf(h->neighbor_diff_csv_fp, "%d%s",
+                        h->neighbor_diff_map[mb_idx],
+                        (y == h->mb_height - 1) ? "" : ",");
+            }
+            fprintf(h->neighbor_diff_csv_fp, "\n");
+        }
+        fprintf(h->neighbor_diff_csv_fp, "\n");
+
+        fflush(h->current_diff_csv_fp);
+        fflush(h->neighbor_diff_csv_fp);
+    }
+
+    h->csv_frame_num++;
+
 #endif
+
     ff_h264_unref_picture(&h->last_pic_for_ec);
 
     return get_consumed_bytes(buf_index, buf_size);

@@ -591,6 +591,8 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     return 1;
 }
 
+static int consecutive_errors = 0; // 添加计数器
+
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     FFFormatContext *const si = ffformatcontext(s);
@@ -637,6 +639,16 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
         {
             av_packet_unref(pkt);
             printf("iformat->read_packet < 0\n");
+            consecutive_errors++; // 连续错误计数+1
+            if (consecutive_errors > 10)
+            {
+                av_log(NULL, AV_LOG_FATAL, "iformat->read_packet failed\n");
+                exit(1); // 或 return AVERROR(EIO);
+            }
+            // else
+            // {
+            //     consecutive_errors = 0;
+            // }
             // system("pause");
             /* Some demuxers return FFERROR_REDO when they consume
                data and discard it (ignored streams, junk, extradata).

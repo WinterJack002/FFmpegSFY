@@ -5693,18 +5693,50 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
         int neighbor_avg_diff = 0;
         if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
         {
-            printf("current_diff:%d\n", current_diff);
-            printf("neighbor_avg_diff:%d\n", neighbor_avg_diff);
+            // printf("current_diff:%d\n", current_diff);
+            // printf("neighbor_avg_diff:%d\n", neighbor_avg_diff);
             // 异常判断：差异超过5倍平均值且绝对值阈值
-            const int threshold = FFMAX(16, 5 * neighbor_avg_diff);
+            const int threshold = FFMAX(16, 100 * neighbor_avg_diff);
             if (current_diff > threshold)
             {
                 h->error_mb_map[sl->mb_xy] = 1;
                 av_log(h->avctx, AV_LOG_WARNING,
-                       "MV anomaly @(%d,%d) curr_diff=%d (ref:%d,%d)\n",
-                       sl->mb_x, sl->mb_y, current_diff, ref_mv_x, ref_mv_y);
+                       "MV anomaly @(%d,%d) curr_diff=%d neighbor_avg_diff=%d threshold=%d ref:(%d,%d)\n",
+                       sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff, threshold, ref_mv_x, ref_mv_y);
             }
         }
+
+        if (!h->frame_initialized)
+        {
+            const int needed_size = h->mb_width * h->mb_height;
+
+            // 检查是否需要重新分配内存（分辨率变化时）
+            if (h->map_allocated_size < needed_size)
+            {
+                av_freep(&h->current_diff_map);
+                av_freep(&h->neighbor_diff_map);
+                h->current_diff_map = av_malloc_array(needed_size, sizeof(int));
+                h->neighbor_diff_map = av_malloc_array(needed_size, sizeof(int));
+                h->map_allocated_size = needed_size;
+                if (!h->current_diff_map || !h->neighbor_diff_map)
+                {
+                    return AVERROR(ENOMEM);
+                }
+            }
+
+            // 整帧初始化（无论是否重新分配）
+            memset(h->current_diff_map, -1, h->map_allocated_size * sizeof(int));
+            memset(h->neighbor_diff_map, -1, h->map_allocated_size * sizeof(int));
+            h->frame_initialized = 1; // 标记已初始化
+        }
+
+        // 存储差异数据（按宏块线性索引）
+        const int mb_idx = sl->mb_x + sl->mb_y * h->mb_width;
+        h->current_diff_map[mb_idx] = current_diff; // 当前宏块差异
+        h->neighbor_diff_map[mb_idx] = (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
+                                           ? neighbor_avg_diff
+                                           : -1; // 邻居平均差异（无效为-1）
+
         // int current_mv_x = sl->mv_cache[0][scan8[0]][0];
         // int current_mv_y = sl->mv_cache[0][scan8[0]][1];
 

@@ -247,7 +247,7 @@ void av_free(void *ptr)
 #endif
 }
 
-void av_freep(void *arg)
+void av_freep(void *arg) // 用于释放指针指向的内存，并将指针设为 NULL，防止悬挂指针问题。
 {
     void *val;
 

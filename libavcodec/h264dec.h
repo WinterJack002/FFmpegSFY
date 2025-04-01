@@ -575,6 +575,19 @@ typedef struct H264Context
     int error_mb_stride;   // 前一帧宏块步长
     int prev_mb_width;     // 新增记录 SPS 分辨率是否变化
     int prev_mb_height;    //
+
+    FILE *error_log_fp; // 新增：错误日志文件指针
+    int json_frame_num; // JSON文件专用计数器
+    int csv_frame_num;  // CSV文件专用计数器
+
+    // 新增CSV相关字段
+    FILE *current_diff_csv_fp; // 分离的两个文件指针
+    FILE *neighbor_diff_csv_fp;
+    int *current_diff_map;  // 存储current_diff的二维数组
+    int *neighbor_diff_map; // 存储neighbor_avg_diff的二维数组
+    int map_allocated_size; // 已分配内存大小
+
+    int frame_initialized; // 新增：标记当前帧是否已初始化
 #endif
 } H264Context;
 

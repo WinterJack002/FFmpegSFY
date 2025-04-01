@@ -390,6 +390,9 @@ static av_cold int h264_decode_end(AVCodecContext *avctx)
         h->error_log_fp = NULL;
     }
     av_freep(&h->error_mb_map);
+    av_freep(&h->current_diff_map);
+    av_freep(&h->neighbor_diff_map);
+    h->diff_map_alloc_size = 0;
 #endif
 
     ff_h264_remove_all_refs(h);
@@ -1186,6 +1189,31 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     {
         int needed_size = h->mb_stride * h->mb_height;
         // 检查是否需要重新分配
+        /* 分配/重分配差异数据内存 */
+        if (!h->current_diff_map ||
+            h->diff_map_alloc_size < needed_size ||
+            h->prev_mb_width != h->mb_width ||
+            h->prev_mb_height != h->mb_height)
+        {
+            av_freep(&h->current_diff_map);
+            av_freep(&h->neighbor_diff_map);
+
+            h->current_diff_map = av_malloc_array(needed_size, sizeof(int));
+            h->neighbor_diff_map = av_malloc_array(needed_size, sizeof(int));
+            h->diff_map_alloc_size = needed_size;
+
+            if (!h->current_diff_map || !h->neighbor_diff_map)
+            {
+                return AVERROR(ENOMEM);
+            }
+
+            h->prev_mb_width = h->mb_width;
+            h->prev_mb_height = h->mb_height;
+        }
+
+        // 每帧开始时标记未初始化
+        h->frame_initialized = 0;
+
         if (!h->error_mb_map ||
             h->error_mb_stride != h->mb_stride ||
             h->prev_mb_width != h->mb_width || // 新增：检查宽度变化
@@ -1207,6 +1235,10 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     }
     else
     {
+        // 分辨率无效时清理
+        av_freep(&h->current_diff_map);
+        av_freep(&h->neighbor_diff_map);
+        h->diff_map_alloc_size = 0;
         // 如果参数未初始化，跳过错误检查
         h->error_mb_map = NULL;
     }

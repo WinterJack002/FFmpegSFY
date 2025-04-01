@@ -5706,28 +5706,20 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
             }
         }
 
-        if (!h->frame_initialized)
+        if (!h->current_diff_map && !h->neighbor_diff_map)
         {
-            const int needed_size = h->mb_width * h->mb_height;
+            // 若未分配，跳过检查
+            return 0;
+        }
 
-            // 检查是否需要重新分配内存（分辨率变化时）
-            if (h->map_allocated_size < needed_size)
+        if (!h->neighbor_diff_map && h->current_diff_map)
+        {
+            memset(h->current_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
+            memset(h->neighbor_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
+            if (!h->current_diff_map || !h->neighbor_diff_map)
             {
-                av_freep(&h->current_diff_map);
-                av_freep(&h->neighbor_diff_map);
-                h->current_diff_map = av_malloc_array(needed_size, sizeof(int));
-                h->neighbor_diff_map = av_malloc_array(needed_size, sizeof(int));
-                h->map_allocated_size = needed_size;
-                if (!h->current_diff_map || !h->neighbor_diff_map)
-                {
-                    return AVERROR(ENOMEM);
-                }
+                return AVERROR(ENOMEM);
             }
-
-            // 整帧初始化（无论是否重新分配）
-            memset(h->current_diff_map, -1, h->map_allocated_size * sizeof(int));
-            memset(h->neighbor_diff_map, -1, h->map_allocated_size * sizeof(int));
-            h->frame_initialized = 1; // 标记已初始化
         }
 
         // 存储差异数据（按宏块线性索引）

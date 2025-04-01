@@ -587,7 +587,8 @@ typedef struct H264Context
     int *neighbor_diff_map; // 存储neighbor_avg_diff的二维数组
     int map_allocated_size; // 已分配内存大小
 
-    int frame_initialized; // 新增：标记当前帧是否已初始化
+    int diff_map_alloc_size; // 当前分配的大小
+    int frame_initialized;   // 新增：标记当前帧是否已初始化
 #endif
 } H264Context;
 

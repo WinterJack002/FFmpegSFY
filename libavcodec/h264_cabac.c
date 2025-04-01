@@ -5024,80 +5024,80 @@ static av_always_inline void decode_cabac_luma_residual(const H264Context *h, H2
         }
     }
 }
-#if WINTER_MV_ERROR_CHECK
-// 辅助函数：计算邻居宏块与前一帧MV差异的平均值
-static int calculate_neighbor_mv_diff(const H264Context *h, H264SliceContext *sl,
-                                      int mb_x, int mb_y, int *avg_diff)
-{
+// #if WINTER_MV_ERROR_CHECK
+// // 辅助函数：计算邻居宏块与前一帧MV差异的平均值
+// static int calculate_neighbor_mv_diff(const H264Context *h, H264SliceContext *sl,
+//                                       int mb_x, int mb_y, int *avg_diff)
+// {
 
-    /* ------ 通过参考帧列表获取前一帧数据 ------ */
-    const H264Picture *ref_pic = sl->ref_list[0][0].parent; // 获取前向参考帧
-    if (!ref_pic || !ref_pic->motion_val[0])
-    {
-        return -1;
-    }
+//     /* ------ 通过参考帧列表获取前一帧数据 ------ */
+//     const H264Picture *ref_pic = sl->ref_list[0][0].parent; // 获取前向参考帧
+//     if (!ref_pic || !ref_pic->motion_val[0])
+//     {
+//         return -1;
+//     }
 
-    int neighbor_count = 0;
-    int total_diff = 0;
+//     int neighbor_count = 0;
+//     int total_diff = 0;
 
-    // 邻居宏块坐标定义：左(A)、上(B)、右上(C)
-    const int neighbors[3][2] = {
-        {mb_x - 1, mb_y},    // 左邻
-        {mb_x, mb_y - 1},    // 上邻
-        {mb_x + 1, mb_y - 1} // 右上邻
-    };
+//     // 邻居宏块坐标定义：左(A)、上(B)、右上(C)
+//     const int neighbors[3][2] = {
+//         {mb_x - 1, mb_y},    // 左邻
+//         {mb_x, mb_y - 1},    // 上邻
+//         {mb_x + 1, mb_y - 1} // 右上邻
+//     };
 
-    for (int i = 0; i < 3; i++)
-    {
-        const int nx = neighbors[i][0];
-        const int ny = neighbors[i][1];
+//     for (int i = 0; i < 3; i++)
+//     {
+//         const int nx = neighbors[i][0];
+//         const int ny = neighbors[i][1];
 
-        // 检查邻居坐标是否合法
-        if (nx < 0 || ny < 0 || nx >= h->mb_width || ny >= h->mb_height)
-        {
-            continue;
-        }
+//         // 检查邻居坐标是否合法
+//         if (nx < 0 || ny < 0 || nx >= h->mb_width || ny >= h->mb_height)
+//         {
+//             continue;
+//         }
 
-        const int neighbor_xy = nx + ny * h->mb_stride;
+//         const int neighbor_xy = nx + ny * h->mb_stride;
 
-        /* ------ 当前帧MV获取 ------ */
-        int cur_mv_x = sl->mv_cache[0][scan8[0]][0]; // 使用mv_cache获取当前子块MV
-        int cur_mv_y = sl->mv_cache[0][scan8[0]][1];
+//         /* ------ 当前帧MV获取 ------ */
+//         int cur_mv_x = sl->mv_cache[0][scan8[0]][0]; // 使用mv_cache获取当前子块MV
+//         int cur_mv_y = sl->mv_cache[0][scan8[0]][1];
 
-        /* ------ 参考帧MV获取 ------ */
-        int ref_mv_x, ref_mv_y;
-        const int ref_xy = nx + ny * ref_pic->mb_stride;
+//         /* ------ 参考帧MV获取 ------ */
+//         int ref_mv_x, ref_mv_y;
+//         const int ref_xy = nx + ny * ref_pic->mb_stride;
 
-        // 获取参考帧中同位宏块的主MV（16x16块）
-        if (ref_xy < ref_pic->mb_width * ref_pic->mb_height)
-        {
-            ref_mv_x = ref_pic->motion_val[0][ref_xy][0];
-            ref_mv_y = ref_pic->motion_val[0][ref_xy][1];
-        }
-        else
-        {
-            continue; // 越界处理
-        }
+//         // 获取参考帧中同位宏块的主MV（16x16块）
+//         if (ref_xy < ref_pic->mb_width * ref_pic->mb_height)
+//         {
+//             ref_mv_x = ref_pic->motion_val[0][ref_xy][0];
+//             ref_mv_y = ref_pic->motion_val[0][ref_xy][1];
+//         }
+//         else
+//         {
+//             continue; // 越界处理
+//         }
 
-        // 有效性检查（参考帧MV可能为无效值）
-        if (ref_mv_x == (int16_t)0x8000 || ref_mv_y == (int16_t)0x8000)
-        {
-            continue;
-        }
+//         // 有效性检查（参考帧MV可能为无效值）
+//         if (ref_mv_x == (int16_t)0x8000 || ref_mv_y == (int16_t)0x8000)
+//         {
+//             continue;
+//         }
 
-        // 计算曼哈顿距离
-        int diff = abs(cur_mv_x - ref_mv_x) + abs(cur_mv_y - ref_mv_y);
-        total_diff += diff;
-        neighbor_count++;
-    }
+//         // 计算曼哈顿距离
+//         int diff = abs(cur_mv_x - ref_mv_x) + abs(cur_mv_y - ref_mv_y);
+//         total_diff += diff;
+//         neighbor_count++;
+//     }
 
-    if (neighbor_count == 0)
-        return -1;
+//     if (neighbor_count == 0)
+//         return -1;
 
-    *avg_diff = total_diff / neighbor_count;
-    return 0;
-}
-#endif
+//     *avg_diff = total_diff / neighbor_count;
+//     return 0;
+// }
+// #endif
 /**
  * Decode a macroblock.
  * @return 0 if OK, ER_AC_ERROR / ER_DC_ERROR / ER_MV_ERROR if an error is noticed
@@ -5653,110 +5653,110 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
         h->chroma_pred_mode_table[mb_xy] = 0;
         write_back_motion(h, sl, mb_type);
 
-#if WINTER_MV_ERROR_CHECK
-        /*
-         * 取 16*16 MV 的第一个:
-         *   |
-         * --+--------------
-         *   | 0 0 0 0 0 0 0 0
-         *   | 0 0 0 0 |v| v v v
-         *   | 0 0 0 0  v  v v v
-         *   | 0 0 0 0  v  v v v
-         *   | 0 0 0 0  v  v v v
-         */
-        // 获取当前宏块中心4x4子块MV
+        // #if WINTER_MV_ERROR_CHECK
+        //         /*
+        //          * 取 16*16 MV 的第一个:
+        //          *   |
+        //          * --+--------------
+        //          *   | 0 0 0 0 0 0 0 0
+        //          *   | 0 0 0 0 |v| v v v
+        //          *   | 0 0 0 0  v  v v v
+        //          *   | 0 0 0 0  v  v v v
+        //          *   | 0 0 0 0  v  v v v
+        //          */
+        //         // 获取当前宏块中心4x4子块MV
 
-        if (!h->error_mb_map)
-        {
-            // 若未分配，跳过检查
-            return 0;
-        }
+        //         if (!h->error_mb_map)
+        //         {
+        //             // 若未分配，跳过检查
+        //             return 0;
+        //         }
 
-        const int scan_idx = scan8[0]; // 宏块左上角第一个4x4子块
-        int current_mv_x = sl->mv_cache[0][scan_idx][0];
-        int current_mv_y = sl->mv_cache[0][scan_idx][1];
+        //         const int scan_idx = scan8[0]; // 宏块左上角第一个4x4子块
+        //         int current_mv_x = sl->mv_cache[0][scan_idx][0];
+        //         int current_mv_y = sl->mv_cache[0][scan_idx][1];
 
-        // 获取参考帧中同位块MV
-        const H264Picture *ref_pic = sl->ref_list[0][0].parent;
-        int ref_mv_x = 0, ref_mv_y = 0;
-        if (ref_pic && ref_pic->motion_val[0])
-        {
-            const int ref_xy = sl->mb_x + sl->mb_y * ref_pic->mb_stride;
-            ref_mv_x = ref_pic->motion_val[0][ref_xy][0];
-            ref_mv_y = ref_pic->motion_val[0][ref_xy][1];
-        }
+        //         // 获取参考帧中同位块MV
+        //         const H264Picture *ref_pic = sl->ref_list[0][0].parent;
+        //         int ref_mv_x = 0, ref_mv_y = 0;
+        //         if (ref_pic && ref_pic->motion_val[0])
+        //         {
+        //             const int ref_xy = sl->mb_x + sl->mb_y * ref_pic->mb_stride;
+        //             ref_mv_x = ref_pic->motion_val[0][ref_xy][0];
+        //             ref_mv_y = ref_pic->motion_val[0][ref_xy][1];
+        //         }
 
-        // 计算当前MV与参考帧MV差异
-        int current_diff = abs(current_mv_x - ref_mv_x) + abs(current_mv_y - ref_mv_y);
+        //         // 计算当前MV与参考帧MV差异
+        //         int current_diff = abs(current_mv_x - ref_mv_x) + abs(current_mv_y - ref_mv_y);
 
-        // 计算邻居平均差异
-        int neighbor_avg_diff = 0;
-        if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
-        {
-            // printf("current_diff:%d\n", current_diff);
-            // printf("neighbor_avg_diff:%d\n", neighbor_avg_diff);
-            // 异常判断：差异超过5倍平均值且绝对值阈值
-            const int threshold = FFMAX(16, 100 * neighbor_avg_diff);
-            if (current_diff > threshold)
-            {
-                h->error_mb_map[sl->mb_xy] = 1;
-                av_log(h->avctx, AV_LOG_WARNING,
-                       "MV anomaly @(%d,%d) curr_diff=%d neighbor_avg_diff=%d threshold=%d ref:(%d,%d)\n",
-                       sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff, threshold, ref_mv_x, ref_mv_y);
-            }
-        }
+        //         // 计算邻居平均差异
+        //         int neighbor_avg_diff = 0;
+        //         if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
+        //         {
+        //             // printf("current_diff:%d\n", current_diff);
+        //             // printf("neighbor_avg_diff:%d\n", neighbor_avg_diff);
+        //             // 异常判断：差异超过5倍平均值且绝对值阈值
+        //             const int threshold = FFMAX(16, 100 * neighbor_avg_diff);
+        //             if (current_diff > threshold)
+        //             {
+        //                 h->error_mb_map[sl->mb_xy] = 1;
+        //                 av_log(h->avctx, AV_LOG_WARNING,
+        //                        "MV anomaly @(%d,%d) curr_diff=%d neighbor_avg_diff=%d threshold=%d ref:(%d,%d)\n",
+        //                        sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff, threshold, ref_mv_x, ref_mv_y);
+        //             }
+        //         }
 
-        if (!h->current_diff_map && !h->neighbor_diff_map)
-        {
-            // 若未分配，跳过检查
-            return 0;
-        }
+        //         if (!h->current_diff_map && !h->neighbor_diff_map)
+        //         {
+        //             // 若未分配，跳过检查
+        //             return 0;
+        //         }
 
-        if (!h->neighbor_diff_map && h->current_diff_map)
-        {
-            memset(h->current_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
-            memset(h->neighbor_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
-            if (!h->current_diff_map || !h->neighbor_diff_map)
-            {
-                return AVERROR(ENOMEM);
-            }
-        }
+        //         if (!h->neighbor_diff_map && h->current_diff_map)
+        //         {
+        //             memset(h->current_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
+        //             memset(h->neighbor_diff_map, -1, h->diff_map_alloc_size * sizeof(int));
+        //             if (!h->current_diff_map || !h->neighbor_diff_map)
+        //             {
+        //                 return AVERROR(ENOMEM);
+        //             }
+        //         }
 
-        // 存储差异数据（按宏块线性索引）
-        const int mb_idx = sl->mb_x + sl->mb_y * h->mb_width;
-        h->current_diff_map[mb_idx] = current_diff; // 当前宏块差异
-        h->neighbor_diff_map[mb_idx] = (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
-                                           ? neighbor_avg_diff
-                                           : -1; // 邻居平均差异（无效为-1）
+        //         // 存储差异数据（按宏块线性索引）
+        //         const int mb_idx = sl->mb_x + sl->mb_y * h->mb_width;
+        //         h->current_diff_map[mb_idx] = current_diff; // 当前宏块差异
+        //         h->neighbor_diff_map[mb_idx] = (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
+        //                                            ? neighbor_avg_diff
+        //                                            : -1; // 邻居平均差异（无效为-1）
 
-        // int current_mv_x = sl->mv_cache[0][scan8[0]][0];
-        // int current_mv_y = sl->mv_cache[0][scan8[0]][1];
+        //         // int current_mv_x = sl->mv_cache[0][scan8[0]][0];
+        //         // int current_mv_y = sl->mv_cache[0][scan8[0]][1];
 
-        // // 计算当前MV与前一帧同位MV的差异
-        // int prev_mv_x = h->prev_mv[mb_xy][0];
-        // int prev_mv_y = h->prev_mv[mb_xy][1];
-        // int current_diff = abs(current_mv_x - prev_mv_x) + abs(current_mv_y - prev_mv_y);
+        //         // // 计算当前MV与前一帧同位MV的差异
+        //         // int prev_mv_x = h->prev_mv[mb_xy][0];
+        //         // int prev_mv_y = h->prev_mv[mb_xy][1];
+        //         // int current_diff = abs(current_mv_x - prev_mv_x) + abs(current_mv_y - prev_mv_y);
 
-        // // 计算邻居宏块的平均差异
-        // int neighbor_avg_diff = 0;
-        // if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
-        // {
-        //     // 异常判断：当前差异 > 5倍邻居平均差异 且 绝对值超过最小阈值
-        //     if (neighbor_avg_diff > 0 &&
-        //         current_diff > 5 * neighbor_avg_diff &&
-        //         current_diff > 16) // 防止小幅度运动误报
-        //     {
-        //         h->error_mb_map[mb_xy] = 1; // 标记错误宏块
-        //         av_log(h->avctx, AV_LOG_WARNING,
-        //                "MV anomaly detected at (%d,%d): curr_diff=%d, neighbor_avg=%d\n",
-        //                sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff);
-        //     }
-        // }
+        //         // // 计算邻居宏块的平均差异
+        //         // int neighbor_avg_diff = 0;
+        //         // if (calculate_neighbor_mv_diff(h, sl, sl->mb_x, sl->mb_y, &neighbor_avg_diff) == 0)
+        //         // {
+        //         //     // 异常判断：当前差异 > 5倍邻居平均差异 且 绝对值超过最小阈值
+        //         //     if (neighbor_avg_diff > 0 &&
+        //         //         current_diff > 5 * neighbor_avg_diff &&
+        //         //         current_diff > 16) // 防止小幅度运动误报
+        //         //     {
+        //         //         h->error_mb_map[mb_xy] = 1; // 标记错误宏块
+        //         //         av_log(h->avctx, AV_LOG_WARNING,
+        //         //                "MV anomaly detected at (%d,%d): curr_diff=%d, neighbor_avg=%d\n",
+        //         //                sl->mb_x, sl->mb_y, current_diff, neighbor_avg_diff);
+        //         //     }
+        //         // }
 
-        // // 更新前一帧MV缓存（使用宏块中心4x4块的MV代表整个宏块）
-        // h->prev_mv[mb_xy][0] = current_mv_x;
-        // h->prev_mv[mb_xy][1] = current_mv_y;
-#endif
+        //         // // 更新前一帧MV缓存（使用宏块中心4x4块的MV代表整个宏块）
+        //         // h->prev_mv[mb_xy][0] = current_mv_x;
+        //         // h->prev_mv[mb_xy][1] = current_mv_y;
+        // #endif
     }
 
     if (!IS_INTRA16x16(mb_type))

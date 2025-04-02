@@ -41,3 +41,7 @@
 /src
 /mapfile
 /tools/python/__pycache__/
+/.vscode
+residual_data.txt
+variance.txt
+/debug/

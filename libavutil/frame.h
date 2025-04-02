@@ -360,6 +360,10 @@ typedef struct AVFrame {
      */
     uint8_t *data[AV_NUM_DATA_POINTERS];
 
+    #if gly_residual || 1
+    uint8_t *residual;
+    int *var;
+    #endif
     /**
      * For video, a positive or negative value, which is typically indicating
      * the size in bytes of each picture line, but it can also be:

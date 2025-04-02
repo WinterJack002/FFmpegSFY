@@ -17,9 +17,16 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+#define VAR_MV_ERROR_CHECK 1
+#define gly_new_residual 1
 #define gly_erxy 1
 #define gly_test 0
 #define gly_filter 0
+#define gly_return 1
+#define gly_frame_count 1
+#define gly_slice_xy 1
+#define gly_residual 0
+#define gly_write_residual 0
 #ifndef AVCODEC_AVCODEC_H
 #define AVCODEC_AVCODEC_H
 
@@ -2125,6 +2132,9 @@ typedef struct AVCodecContext {
     int final_error_y;
     // int m_ER_MB_ERROR_x;
     // int m_ER_MB_ERROR_y;
+#endif
+#if gly_frame_count
+    int frame_count;
 #endif
 } AVCodecContext;
 

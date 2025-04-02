@@ -57,6 +57,11 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
     dest_cb = h->cur_pic.f->data[1] +  (mb_x << PIXEL_SHIFT) * 8 + mb_y * sl->uvlinesize * block_h;
     dest_cr = h->cur_pic.f->data[2] +  (mb_x << PIXEL_SHIFT) * 8 + mb_y * sl->uvlinesize * block_h;
 
+    #if gly_new_residual
+    uint8_t *prediction_dest_y;
+    prediction_dest_y = h->cur_pic.f->residual + ((mb_x << PIXEL_SHIFT)     + mb_y * sl->linesize)  * 16;
+    #endif
+
     h->vdsp.prefetch(dest_y  + (sl->mb_x & 3) * 4 * sl->linesize   + (64 << PIXEL_SHIFT), sl->linesize,       4);
     h->vdsp.prefetch(dest_cb + (sl->mb_x & 7)     * sl->uvlinesize + (64 << PIXEL_SHIFT), dest_cr - dest_cb, 2);
 
@@ -186,7 +191,17 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
                               h->h264dsp.biweight_h264_pixels_tab);
             }
         }
-
+        #if gly_new_residual
+        ERContext *s = &h->er;
+        int error = s->error_status_table[mb_xy];
+        if (!(error & ER_DC_ERROR)){
+            // if (! IS_INTRA4x4(mb_type)){
+                for(i = 0; i < 16; i++){
+                    memcpy(prediction_dest_y + i * h->cur_pic.f->linesize[0] , dest_y + i * h->cur_pic.f->linesize[0], 16 );
+                }
+            // }
+        }
+        #endif
         hl_decode_mb_idct_luma(h, sl, mb_type, SIMPLE, transform_bypass,
                                PIXEL_SHIFT, block_offset, linesize, dest_y, 0);
 

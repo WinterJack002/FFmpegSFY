@@ -39,6 +39,8 @@ static void get_frame_defaults(AVFrame *frame)
 {
     memset(frame, 0, sizeof(*frame));
 
+
+
     frame->pts                   =
     frame->pkt_dts               = AV_NOPTS_VALUE;
     frame->best_effort_timestamp = AV_NOPTS_VALUE;
@@ -93,6 +95,8 @@ AVFrame *av_frame_alloc(void)
         return NULL;
 
     get_frame_defaults(frame);
+    
+
 
     return frame;
 }
@@ -101,6 +105,7 @@ void av_frame_free(AVFrame **frame)
 {
     if (!frame || !*frame)
         return;
+
 
     av_frame_unref(*frame);
     av_freep(frame);

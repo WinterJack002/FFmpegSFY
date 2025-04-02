@@ -2726,7 +2726,7 @@ static int write_variance_to_file(const H264Context *h, const char *filename) {
 // }
 #endif 
 #if gly_new_residual
-static int get_residual(const H264Context *h, H264SliceContext *sl){
+static int get_test_residual(const H264Context *h, H264SliceContext *sl){
     const int mb_x    = sl->mb_x;
     const int mb_y    = sl->mb_y;
     int *linesize = h->cur_pic.f->linesize;
@@ -2813,6 +2813,150 @@ static int save_residual_to_file(const H264Context *h, H264SliceContext *sl, con
     fclose(file);
     return 0;
 }
+#endif
+#if VAR_MV_ERROR_CHECK
+static int compute_neighbor_diff(const H264Context *h, H264SliceContext *sl,
+                                 int mb_x, int mb_y, const H264Picture *ref_pic)
+{
+    int ref_mb_index = mb_y * h->mb_width + mb_x;
+    int16_t(*neighbor_mvs)[2] = h->cur_pic.motion_val[0] + ref_mb_index * 16;
+    int16_t(*ref_mvs)[2] = ref_pic->motion_val[0] + ref_mb_index * 16;
+    int total = 0;
+    int i;
+
+    for (i = 0; i < 16; i++)
+    {
+        total += abs(neighbor_mvs[i][0] - ref_mvs[i][0]) +
+                 abs(neighbor_mvs[i][1] - ref_mvs[i][1]);
+    }
+    return total / 16;
+}
+
+static int custom_mv_mb_err(const H264Context *h, H264SliceContext *sl, int mb_x, int mb_y)
+{
+    const H264Picture *ref_pic = sl->ref_list[0][0].parent;
+    int current_diff = 0;
+    int current_index, i;
+
+    int neighbor_count = 0;
+    int total_neighbor_diff = 0;
+
+    int neighbor_avg = 0;
+    int threshold = 0;
+
+    int16_t(*current_mvs)[2], (*ref_mvs)[2];
+    int16_t(*left_mvs)[2], (*left_ref_mvs)[2];
+    int16_t(*top_mvs)[2], (*top_ref_mvs)[2];
+    int16_t(*tr_mvs)[2], (*tr_ref_mvs)[2];
+    // int diff, threshold;
+
+    if (!ref_pic || !ref_pic->motion_val[0])
+        return 0;
+
+    current_index = mb_y * h->mb_width + mb_x;
+    current_mvs = h->cur_pic.motion_val[0] + current_index * 16;
+    ref_mvs = ref_pic->motion_val[0] + current_index * 16;
+
+    // 计算当前宏块的平均差异
+    for (i = 0; i < 16; i++)
+    {
+        current_diff += abs(current_mvs[i][0] - ref_mvs[i][0]) +
+                        abs(current_mvs[i][1] - ref_mvs[i][1]);
+    }
+    current_diff /= 16;
+
+    // 左邻居
+    if (mb_x > 0)
+    {
+        total_neighbor_diff += compute_neighbor_diff(h, sl, mb_x - 1, mb_y, ref_pic);
+        neighbor_count++;
+    }
+
+    // 上邻居
+    if (mb_y > 0)
+    {
+        total_neighbor_diff += compute_neighbor_diff(h, sl, mb_x, mb_y - 1, ref_pic);
+        neighbor_count++;
+    }
+
+    // 右上邻居（需检查边界）
+    if (mb_y > 0 && mb_x + 1 < h->mb_width)
+    {
+        total_neighbor_diff += compute_neighbor_diff(h, sl, mb_x + 1, mb_y - 1, ref_pic);
+        neighbor_count++;
+    }
+
+    if (neighbor_count == 0)
+    {
+        return 0; // 无邻居可比较，默认无误
+    }
+
+    neighbor_avg = total_neighbor_diff / neighbor_count;
+    threshold = 7 * neighbor_avg;
+
+    return (current_diff > threshold) ? -1 : 0;
+}
+
+static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
+                                int start_x, int start_y, int *last_err_x, int *last_err_y)
+{
+    int current_x = start_x;
+    int current_y = start_y;
+    *last_err_x = start_x;
+    *last_err_y = start_y;
+    int window_counter = 0;
+    const int window_size = 40;
+
+    // 移动到前一个宏块
+    current_x--;
+    if (current_x < 0 && current_y > 0)
+    {
+        current_y--;
+        current_x = h->mb_width - 1;
+    }
+    else if (current_x < 0)
+    {
+        return; // 无前驱宏块
+    }
+
+    while (current_y >= 0)
+    {
+        if (current_x < 0 || current_x >= h->mb_width || current_y >= h->mb_height)
+        {
+            break; // 越界处理
+        }
+
+        // 1.mv 错误检测
+        int ret = custom_mv_mb_err(h, sl, current_x, current_y);
+        // 2.dct 系数错误检测（gly）
+        int ret2 = get_test_residual(h, sl);
+        if (ret == -1 || ret2 == -1)
+        {
+            *last_err_x = current_x;
+            *last_err_y = current_y;
+            window_counter = 0; // 重置窗口计数器
+        }
+        else
+        {
+            window_counter++;
+            if (window_counter >= window_size)
+            {
+                break; // 找到足够连续正确宏块
+            }
+        }
+
+        // 移至前一个宏块
+        current_x--;
+        if (current_x < 0)
+        {
+            current_y--;
+            current_x = h->mb_width - 1;
+            if (current_y < 0)
+                break;
+        }
+    }
+}
+
 #endif
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
@@ -2917,9 +3061,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
             if (ret >= 0){
                 ff_h264_hl_decode_mb(h, sl);
-                #if gly_residual
-                get_residual(h, sl);
-                #endif
+
             }
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
@@ -2990,7 +3132,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
             if (eos || sl->mb_y >= h->mb_height) {
                 ff_tlog(h->avctx, "slice end %d %d\n",get_bits_count(&sl->gb), sl->gb.size_in_bits);
-                printf("slice end cha=%d all1=%d all2=%d \n",sl->cabac.bytestream_end - sl->cabac.bytestream ,sl->cabac.bytestream_end - sl->cabac.bytestream_start, sl->gb.size_in_bits);
+                // printf("bytes left=%d all byte=%d  \n",sl->cabac.bytestream_end - sl->cabac.bytestream ,sl->cabac.bytestream_end - sl->cabac.bytestream_start);
                 er_x = sl->mb_x;
                 er_y = sl->mb_y;
                 resync_mb_x = sl->resync_mb_x;
@@ -3093,6 +3235,18 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     }
 
 finish:
+    #if VAR_MV_ERROR_CHECK
+        int last_err_x = er_x;
+        int last_err_y = er_y;
+        // 新增的错误边界检测逻辑（使用原有设计的两个函数）
+        if (er_flag== 1 || er_flag == 2) {
+            find_error_boundary(h, sl , er_x , er_y , &last_err_x, &last_err_y);
+        }
+        er_x = last_err_x;
+        er_y = last_err_y;
+        printf("er_x = %d , er_y = %d , last_er_x = %d, last_er_y = %d , er_flag = %d\n",er_x, er_y,last_err_x, last_err_y ,er_flag);
+    #endif
+
 
     if(er_flag == 1){//有错
         er_add_slice(sl, resync_mb_x, resync_mb_y, er_x , er_y, ER_MB_ERROR);
@@ -3103,7 +3257,7 @@ finish:
 
         return AVERROR_INVALIDDATA;
     }
-    if(er_flag == 2){//有错
+    if(er_flag == 2){//可能有错
         er_add_slice(sl, resync_mb_x, resync_mb_y,er_x - 1,er_y, ER_MB_END);
         if (er_x >= lf_x_start){
             loop_filter(h, sl, lf_x_start, er_x );

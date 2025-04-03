@@ -1725,7 +1725,15 @@ typedef struct AVFormatContext {
      * @param pb IO context to be closed and freed
      * @return 0 on success, a negative AVERROR code on failure
      */
-    int (*io_close2)(struct AVFormatContext *s, AVIOContext *pb);
+    
+     int (*io_close2)(struct AVFormatContext *s, AVIOContext *pb);
+     #if gly_ts || 1
+     int correct_ts_pkt;
+     int all_ts_pkt;
+
+     int pre_ts_num;//avio
+     int ts_lose_flag;
+    #endif
 } AVFormatContext;
 
 /**

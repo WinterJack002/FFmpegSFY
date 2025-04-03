@@ -30,6 +30,8 @@
 .\#*
 /.config
 /.version
+/.vscode
+/debug
 /ffmpeg
 /ffplay
 /ffprobe
@@ -41,3 +43,6 @@
 /src
 /mapfile
 /tools/python/__pycache__/
+/libavformat/stf9Cijd
+/libavformat/st7HMRPX
+/libavcodec/st3Hn3vb

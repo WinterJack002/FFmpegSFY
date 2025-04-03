@@ -37,7 +37,6 @@
 #include "pixfmt.h"
 #include "version.h"
 
-
 /**
  * @defgroup lavu_frame AVFrame
  * @ingroup lavu_data
@@ -46,7 +45,8 @@
  * AVFrame is an abstraction for reference-counted raw multimedia data.
  */
 
-enum AVFrameSideDataType {
+enum AVFrameSideDataType
+{
     /**
      * The data is the AVPanScan struct defined in libavcodec.
      */
@@ -226,16 +226,16 @@ enum AVFrameSideDataType {
     AV_FRAME_DATA_VIDEO_HINT,
 };
 
-enum AVActiveFormatDescription {
-    AV_AFD_SAME         = 8,
-    AV_AFD_4_3          = 9,
-    AV_AFD_16_9         = 10,
-    AV_AFD_14_9         = 11,
-    AV_AFD_4_3_SP_14_9  = 13,
+enum AVActiveFormatDescription
+{
+    AV_AFD_SAME = 8,
+    AV_AFD_4_3 = 9,
+    AV_AFD_16_9 = 10,
+    AV_AFD_14_9 = 11,
+    AV_AFD_4_3_SP_14_9 = 13,
     AV_AFD_16_9_SP_14_9 = 14,
-    AV_AFD_SP_4_3       = 15,
+    AV_AFD_SP_4_3 = 15,
 };
-
 
 /**
  * Structure to hold side data for an AVFrame.
@@ -243,10 +243,11 @@ enum AVActiveFormatDescription {
  * sizeof(AVFrameSideData) is not a part of the public ABI, so new fields may be added
  * to the end with a minor bump.
  */
-typedef struct AVFrameSideData {
+typedef struct AVFrameSideData
+{
     enum AVFrameSideDataType type;
     uint8_t *data;
-    size_t   size;
+    size_t size;
     AVDictionary *metadata;
     AVBufferRef *buf;
 } AVFrameSideData;
@@ -262,7 +263,8 @@ typedef struct AVFrameSideData {
  * When overlapping regions are defined, the first region containing a given
  * area of the frame applies.
  */
-typedef struct AVRegionOfInterest {
+typedef struct AVRegionOfInterest
+{
     /**
      * Must be set to the size of this data structure (that is,
      * sizeof(AVRegionOfInterest)).
@@ -337,7 +339,8 @@ typedef struct AVRegionOfInterest {
  * C structure field name for fields accessible through AVOptions. The AVClass
  * for AVFrame can be obtained from avcodec_get_frame_class()
  */
-typedef struct AVFrame {
+typedef struct AVFrame
+{
 #define AV_NUM_DATA_POINTERS 8
     /**
      * pointer to the picture/channel planes.
@@ -360,6 +363,10 @@ typedef struct AVFrame {
      */
     uint8_t *data[AV_NUM_DATA_POINTERS];
 
+#if gly_residual || 1
+    uint8_t *residual;
+    int *var;
+#endif
     /**
      * For video, a positive or negative value, which is typically indicating
      * the size in bytes of each picture line, but it can also be:
@@ -432,8 +439,7 @@ typedef struct AVFrame {
      *
      * @deprecated Use AV_FRAME_FLAG_KEY instead
      */
-    attribute_deprecated
-    int key_frame;
+    attribute_deprecated int key_frame;
 #endif
 
     /**
@@ -470,13 +476,11 @@ typedef struct AVFrame {
     /**
      * picture number in bitstream order
      */
-    attribute_deprecated
-    int coded_picture_number;
+    attribute_deprecated int coded_picture_number;
     /**
      * picture number in display order
      */
-    attribute_deprecated
-    int display_picture_number;
+    attribute_deprecated int display_picture_number;
 #endif
 
     /**
@@ -526,24 +530,21 @@ typedef struct AVFrame {
      *
      * @deprecated Use AV_FRAME_FLAG_INTERLACED instead
      */
-    attribute_deprecated
-    int interlaced_frame;
+    attribute_deprecated int interlaced_frame;
 
     /**
      * If the content is interlaced, is top field displayed first.
      *
      * @deprecated Use AV_FRAME_FLAG_TOP_FIELD_FIRST instead
      */
-    attribute_deprecated
-    int top_field_first;
+    attribute_deprecated int top_field_first;
 #endif
 
 #if FF_API_PALETTE_HAS_CHANGED
     /**
      * Tell user application that palette has changed from previous frame.
      */
-    attribute_deprecated
-    int palette_has_changed;
+    attribute_deprecated int palette_has_changed;
 #endif
 
 #if FF_API_REORDERED_OPAQUE
@@ -558,7 +559,7 @@ typedef struct AVFrame {
      * @deprecated Use AV_CODEC_FLAG_COPY_OPAQUE instead
      */
     attribute_deprecated
-    int64_t reordered_opaque;
+        int64_t reordered_opaque;
 #endif
 
     /**
@@ -572,7 +573,7 @@ typedef struct AVFrame {
      * @deprecated use ch_layout instead
      */
     attribute_deprecated
-    uint64_t channel_layout;
+        uint64_t channel_layout;
 #endif
 
     /**
@@ -605,10 +606,10 @@ typedef struct AVFrame {
     /**
      * Number of elements in extended_buf.
      */
-    int        nb_extended_buf;
+    int nb_extended_buf;
 
     AVFrameSideData **side_data;
-    int            nb_side_data;
+    int nb_side_data;
 
 /**
  * @defgroup lavu_frame_flags AV_FRAME_FLAGS
@@ -621,7 +622,7 @@ typedef struct AVFrame {
 /**
  * The frame data may be corrupted, e.g. due to decoding errors.
  */
-#define AV_FRAME_FLAG_CORRUPT       (1 << 0)
+#define AV_FRAME_FLAG_CORRUPT (1 << 0)
 /**
  * A flag to mark frames that are keyframes.
  */
@@ -629,7 +630,7 @@ typedef struct AVFrame {
 /**
  * A flag to mark the frames which need to be decoded, but shouldn't be output.
  */
-#define AV_FRAME_FLAG_DISCARD   (1 << 2)
+#define AV_FRAME_FLAG_DISCARD (1 << 2)
 /**
  * A flag to mark frames whose content is interlaced.
  */
@@ -639,9 +640,9 @@ typedef struct AVFrame {
  * is interlaced.
  */
 #define AV_FRAME_FLAG_TOP_FIELD_FIRST (1 << 4)
-/**
- * @}
- */
+    /**
+     * @}
+     */
 
     /**
      * Frame flags, a combination of @ref lavu_frame_flags
@@ -684,7 +685,7 @@ typedef struct AVFrame {
      *             data from packets to frames
      */
     attribute_deprecated
-    int64_t pkt_pos;
+        int64_t pkt_pos;
 #endif
 
 #if FF_API_PKT_DURATION
@@ -697,7 +698,7 @@ typedef struct AVFrame {
      * @deprecated use duration instead
      */
     attribute_deprecated
-    int64_t pkt_duration;
+        int64_t pkt_duration;
 #endif
 
     /**
@@ -715,10 +716,10 @@ typedef struct AVFrame {
      * - decoding: set by libavcodec, read by user.
      */
     int decode_error_flags;
-#define FF_DECODE_ERROR_INVALID_BITSTREAM   1
-#define FF_DECODE_ERROR_MISSING_REFERENCE   2
-#define FF_DECODE_ERROR_CONCEALMENT_ACTIVE  4
-#define FF_DECODE_ERROR_DECODE_SLICES       8
+#define FF_DECODE_ERROR_INVALID_BITSTREAM 1
+#define FF_DECODE_ERROR_MISSING_REFERENCE 2
+#define FF_DECODE_ERROR_CONCEALMENT_ACTIVE 4
+#define FF_DECODE_ERROR_DECODE_SLICES 8
 
 #if FF_API_OLD_CHANNEL_LAYOUT
     /**
@@ -727,8 +728,7 @@ typedef struct AVFrame {
      * - decoding: Read by user.
      * @deprecated use ch_layout instead
      */
-    attribute_deprecated
-    int channels;
+    attribute_deprecated int channels;
 #endif
 
 #if FF_API_FRAME_PKT
@@ -741,8 +741,7 @@ typedef struct AVFrame {
      * @deprecated use AV_CODEC_FLAG_COPY_OPAQUE to pass through arbitrary user
      *             data from packets to frames
      */
-    attribute_deprecated
-    int pkt_size;
+    attribute_deprecated int pkt_size;
 #endif
 
     /**
@@ -806,7 +805,6 @@ typedef struct AVFrame {
      */
     int64_t duration;
 } AVFrame;
-
 
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting
@@ -1010,11 +1008,11 @@ AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
  */
 void av_frame_remove_side_data(AVFrame *frame, enum AVFrameSideDataType type);
 
-
 /**
  * Flags for frame cropping.
  */
-enum {
+enum
+{
     /**
      * Apply the maximum possible cropping, even if it requires setting the
      * AVFrame.data[] entries to unaligned pointers. Passing unaligned data
@@ -1023,7 +1021,7 @@ enum {
      * are explicitly documented to accept it. Use this flag only if you
      * absolutely know what you are doing.
      */
-    AV_FRAME_CROP_UNALIGNED     = 1 << 0,
+    AV_FRAME_CROP_UNALIGNED = 1 << 0,
 };
 
 /**

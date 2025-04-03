@@ -26,18 +26,19 @@
 #include "me_cmp.h"
 
 ///< current MB is the first after a resync marker
-#define VP_START               1
-#define ER_AC_ERROR            2
-#define ER_DC_ERROR            4
-#define ER_MV_ERROR            8
-#define ER_AC_END              16
-#define ER_DC_END              32
-#define ER_MV_END              64
+#define VP_START 1
+#define ER_AC_ERROR 2
+#define ER_DC_ERROR 4
+#define ER_MV_ERROR 8
+#define ER_AC_END 16
+#define ER_DC_END 32
+#define ER_MV_END 64
 
-#define ER_MB_ERROR (ER_AC_ERROR|ER_DC_ERROR|ER_MV_ERROR)
-#define ER_MB_END   (ER_AC_END|ER_DC_END|ER_MV_END)
+#define ER_MB_ERROR (ER_AC_ERROR | ER_DC_ERROR | ER_MV_ERROR)
+#define ER_MB_END (ER_AC_END | ER_DC_END | ER_MV_END)
 
-typedef struct ERPicture {
+typedef struct ERPicture
+{
     AVFrame *f;
     const struct ThreadFrame *tf;
 
@@ -49,7 +50,8 @@ typedef struct ERPicture {
     int field_picture;
 } ERPicture;
 
-typedef struct ERContext {
+typedef struct ERContext
+{
     AVCodecContext *avctx;
 
     me_cmp_func sad;
@@ -61,9 +63,9 @@ typedef struct ERContext {
     ptrdiff_t mb_stride;
     ptrdiff_t b8_stride;
 
-    atomic_int error_count;
+    atomic_int error_count; // 用于标记当前Slice解码过程中是否发生过错误
     int error_occurred;
-    uint8_t *error_status_table;
+    uint8_t *error_status_table; // 记录每个宏块的具体错误状态（如ER_MB_ERROR、ER_MB_END）
     uint8_t *er_temp_buffer;
     int16_t *dc_val[3];
     uint8_t *mbskip_table;

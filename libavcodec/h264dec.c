@@ -594,6 +594,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
     int idr_cleared=0;
     int i, ret = 0;
 	int ax1,ax2,ay1,ay2;
+    // printf("byte=%d,flag=%d\n",avctx->internal->in_pkt->er_byte,avctx->internal->in_pkt->er_flag);
 
     h->has_slice = 0;
     h->nal_unit_type= 0;
@@ -1073,6 +1074,7 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     H264Context *h     = avctx->priv_data;
     int buf_index;
     int ret;
+
 
     h->flags = avctx->flags;
     h->setup_finished = 0;

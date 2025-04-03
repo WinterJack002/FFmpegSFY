@@ -47,7 +47,109 @@
 #include "refstruct.h"
 #include "thread.h"
 #include "threadframe.h"
+#if gly_ts
 
+typedef struct AVCodecInternal {
+    /**
+     * When using frame-threaded decoding, this field is set for the first
+     * worker thread (e.g. to decode extradata just once).
+     */
+    int is_copy;
+
+    /**
+     * Audio encoders can set this flag during init to indicate that they
+     * want the small last frame to be padded to a multiple of pad_samples.
+     */
+    int pad_samples;
+
+    struct FramePool *pool;
+
+    void *thread_ctx;
+
+    /**
+     * This packet is used to hold the packet given to decoders
+     * implementing the .decode API; it is unused by the generic
+     * code for decoders implementing the .receive_frame API and
+     * may be freely used (but not freed) by them with the caveat
+     * that the packet will be unreferenced generically in
+     * avcodec_flush_buffers().
+     */
+    AVPacket *in_pkt;
+    struct AVBSFContext *bsf;
+
+    /**
+     * Properties (timestamps+side data) extracted from the last packet passed
+     * for decoding.
+     */
+    AVPacket *last_pkt_props;
+
+    /**
+     * temporary buffer used for encoders to store their bitstream
+     */
+    uint8_t *byte_buffer;
+    unsigned int byte_buffer_size;
+
+    void *frame_thread_encoder;
+
+    /**
+     * The input frame is stored here for encoders implementing the simple
+     * encode API.
+     *
+     * Not allocated in other cases.
+     */
+    AVFrame *in_frame;
+
+    /**
+     * When the AV_CODEC_FLAG_RECON_FRAME flag is used. the encoder should store
+     * here the reconstructed frame corresponding to the last returned packet.
+     *
+     * Not allocated in other cases.
+     */
+    AVFrame *recon_frame;
+
+    /**
+     * If this is set, then FFCodec->close (if existing) needs to be called
+     * for the parent AVCodecContext.
+     */
+    int needs_close;
+
+    /**
+     * Number of audio samples to skip at the start of the next decoded frame
+     */
+    int skip_samples;
+
+    /**
+     * hwaccel-specific private data
+     */
+    void *hwaccel_priv_data;
+
+    /**
+     * checks API usage: after codec draining, flush is required to resume operation
+     */
+    int draining;
+
+    /**
+     * Temporary buffers for newly received or not yet output packets/frames.
+     */
+    AVPacket *buffer_pkt;
+    AVFrame *buffer_frame;
+    int draining_done;
+
+#if FF_API_DROPCHANGED
+    /* used when avctx flag AV_CODEC_FLAG_DROPCHANGED is set */
+    int changed_frames_dropped;
+    int initial_format;
+    int initial_width, initial_height;
+    int initial_sample_rate;
+    AVChannelLayout initial_ch_layout;
+#endif
+
+#if CONFIG_LCMS2
+    FFIccContext icc; /* used to read and write embedded ICC profiles */
+#endif
+} AVCodecInternal;
+
+#endif 
 static const uint8_t field_scan[16+1] = {
     0 + 0 * 4, 0 + 1 * 4, 1 + 0 * 4, 0 + 2 * 4,
     0 + 3 * 4, 1 + 1 * 4, 1 + 2 * 4, 1 + 3 * 4,
@@ -2695,38 +2797,81 @@ static int write_variance_to_file(const H264Context *h, const char *filename) {
     return 0;
 }
 #endif
-#if gly_residual
-// static int test_residual_var(int *var, H264Context *h, int mb_x, int mb_y) {
-//     int blocks_per_row = h->cur_pic.f->width / 4;
-//     int blocks_per_col = h->cur_pic.f->height / 4;
-//     int flag = 0;
-//     // 每个宏块的方差
-//     int cur = var[mb_y * blocks_per_row + mb_x];
+#if gly_new_residual
+static int test_residual(int *var, H264Context *h, int mb_x, int mb_y) {
+
+    const int blocks_per_row = h->cur_pic.f->width / 4;
     
-//     // 定义阈值
-//     const int THRESHOLD = 600;
+    // 计算宏块对应的全局4x4块起始坐标
+    int global_block_x = mb_x * 4;
+    int global_block_y = mb_y * 4;
 
-//     // 如果是最左侧的块（第一列），跳过与左侧的比较
-//     if (mb_x > 0) {
-//         int left = var[mb_y * blocks_per_row + (mb_x - 1)];
-//         if (abs(cur - left) > THRESHOLD) {
-//             flag = -1;  
-//         }
-//     }
+    int neighbor_count = 0;
+    int total_var = 0;
 
-//     // 如果是最上方的块（第一行），跳过与上方的比较
-//     if (mb_y > 0) {
-//         int up = var[(mb_y - 1) * blocks_per_row + mb_x];
-//         if (abs(cur - up) > THRESHOLD) {
-//             flag = -1;
-//         }
-//     }
+    int threshold;
+    int flag = 0;
 
-//     return flag;  // 方差差异没有超过阈值
-// }
+    // 左方宏块 (mb_x-1, mb_y)
+    if (mb_x > 0) {
+        int left_global_x = (mb_x - 1) * 4;
+        for (int by = 0; by < 4; by++) {
+            for (int bx = 0; bx < 4; bx++) {
+                int index = (global_block_y + by) * blocks_per_row + (left_global_x + bx);
+                total_var += h->cur_pic.f->var[index];
+                neighbor_count++;
+            }
+        }
+    }
+
+    // 上方宏块 (mb_x, mb_y-1)
+    if (mb_y > 0) {
+        int top_global_y = (mb_y - 1) * 4;
+        for (int by = 0; by < 4; by++) {
+            for (int bx = 0; bx < 4; bx++) {
+                int index = (top_global_y + by) * blocks_per_row + (global_block_x + bx);
+                total_var += h->cur_pic.f->var[index];
+                neighbor_count++;
+            }
+        }
+    }
+
+    // 左上方宏块 (mb_x-1, mb_y-1)
+    if (mb_x > 0 && mb_y > 0) {
+        int top_left_global_x = (mb_x - 1) * 4;
+        int top_left_global_y = (mb_y - 1) * 4;
+        for (int by = 0; by < 4; by++) {
+            for (int bx = 0; bx < 4; bx++) {
+                int index = (top_left_global_y + by) * blocks_per_row + (top_left_global_x + bx);
+                total_var += h->cur_pic.f->var[index];
+                neighbor_count++;
+            }
+        }
+    }
+
+    threshold = neighbor_count > 0 ? total_var / neighbor_count : 0;
+    
+    // 验证宏块内16个4x4块的方差
+    for (int by = 0; by < 4; by++) {
+        for (int bx = 0; bx < 4; bx++) {
+            // 计算当前4x4块在全局var数组中的索引
+            int global_x = global_block_x + bx;
+            int global_y = global_block_y + by;
+            int index = global_y * blocks_per_row + global_x;
+            
+            // 获取存储的方差值
+            int stored_var = h->cur_pic.f->var[index];
+
+            if(stored_var > 20 * threshold || stored_var > 8000){
+                flag = -1;  // 方差差异超过阈值
+            }   
+        }
+    }
+    return flag;
+}
 #endif 
 #if gly_new_residual
-static int get_test_residual(const H264Context *h, H264SliceContext *sl){
+static int get_residual(const H264Context *h, H264SliceContext *sl){
     const int mb_x    = sl->mb_x;
     const int mb_y    = sl->mb_y;
     int *linesize = h->cur_pic.f->linesize;
@@ -2776,16 +2921,10 @@ static int get_test_residual(const H264Context *h, H264SliceContext *sl){
  
             
             h->cur_pic.f->var[index] = variance;
-            if(variance > 2000){
-                return -1;  
-            }
+
         }
     }
 
-    // int result = test_residual_var(h->cur_pic.f->var, h, mb_x, mb_y);
-    // if (result == -1) {
-    //     return -1;  // 如果差异超过阈值，立即返回-1
-    // }
 
     return 0;
 }
@@ -2929,7 +3068,7 @@ static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
         // 1.mv 错误检测
         int ret = custom_mv_mb_err(h, sl, current_x, current_y);
         // 2.dct 系数错误检测（gly）
-        int ret2 = get_test_residual(h, sl);
+        int ret2 = test_residual(h->cur_pic.f->var, h,current_x,current_y);
         if (ret == -1 || ret2 == -1)
         {
             *last_err_x = current_x;
@@ -2971,7 +3110,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     int resync_mb_x = -1 , resync_mb_y = -1;
     int er_flag = 0;//0无错，1有错
     #endif
-
+    
     #if gly_frame_count
     avctx->frame_count = avctx->frame_count + 1;
     // printf("frame_count = %d,slice_type = %d\n",avctx->frame_count,sl->slice_type);
@@ -3059,6 +3198,9 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             parse_return_code(ret , &ec);
             #endif
 
+            #if gly_new_residual
+            get_residual(h, sl);//计算残差
+            #endif
             if (ret >= 0){
                 ff_h264_hl_decode_mb(h, sl);
 
@@ -3091,6 +3233,13 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
 
             eos = get_cabac_terminate(&sl->cabac);
+
+            #if gly_ts
+            if (avctx->internal->in_pkt->er_flag == 1 && sl->cabac.bytestream - sl->cabac.bytestream_start > avctx->internal->in_pkt->er_byte){
+                eos = 1;
+            }
+            #endif 
+            
 
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
                 sl->cabac.bytestream > sl->cabac.bytestream_end + 2) {
@@ -3242,9 +3391,10 @@ finish:
         if (er_flag== 1 || er_flag == 2) {
             find_error_boundary(h, sl , er_x , er_y , &last_err_x, &last_err_y);
         }
+        printf("er_x = %d , er_y = %d , last_er_x = %d, last_er_y = %d , er_flag = %d\n",er_x, er_y,last_err_x, last_err_y ,er_flag);
         er_x = last_err_x;
         er_y = last_err_y;
-        printf("er_x = %d , er_y = %d , last_er_x = %d, last_er_y = %d , er_flag = %d\n",er_x, er_y,last_err_x, last_err_y ,er_flag);
+
     #endif
 
 

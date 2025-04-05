@@ -312,8 +312,8 @@ enum AVPacketSideDataType
 };
 
 #define AV_PKT_DATA_QUALITY_FACTOR AV_PKT_DATA_QUALITY_STATS // DEPRECATED
-#define gly_ts 0
-#define WINTER_TS_ERROR 1
+#define gly_ts 1
+#define WINTER_TS_ERROR 0
 /**
  * This structure stores auxiliary information for decoding, presenting, or
  * otherwise processing the coded stream. It is typically exported by demuxers

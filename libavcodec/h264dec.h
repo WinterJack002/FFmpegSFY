@@ -48,8 +48,9 @@
 
 #define H264_MAX_PICTURE_COUNT 36
 
-#define WINTER_MV_ERROR_CHECK 1
-
+#define WINTER_MV_VAR_ERROR_CHECK 1
+#define WINTER_MV_FILES_PRINT 0
+#define WINTER_AUTO_RENDERING 1
 /* Compiling in interlaced support reduces the speed
  * of progressive decoding by about 2%. */
 #define ALLOW_INTERLACE
@@ -337,7 +338,7 @@ typedef struct H264SliceContext
     int delta_poc[2];
     int curr_pic_num;
     int max_pic_num;
-#if WINTER_MV_ERROR_CHECK
+#if WINTER_MV_VAR_ERROR_CHECK
     int error_log_frame_count; // 非const可修改
 #endif
 } H264SliceContext;
@@ -572,31 +573,16 @@ typedef struct H264Context
     AVBufferPool *ref_index_pool;
     AVBufferPool *decode_error_flags_pool;
     int ref2frm[MAX_SLICES][2][64]; ///< reference to frame number lists, used in the loop filter, the first 2 are for -2,-1
-    // #if WINTER_MV_ERROR_CHECK
-    //     // int16_t (*prev_mv)[2]; // 存储前一帧每个宏块的MV [list][mv]
-    //     uint8_t *error_mb_map; // 错误宏块标记位图
-    //     int error_mb_stride;   // 前一帧宏块步长
-    //     int prev_mb_width;     // 新增记录 SPS 分辨率是否变化
-    //     int prev_mb_height;    //
-
-    //     FILE *error_log_fp; // 新增：错误日志文件指针
-    //     int json_frame_num; // JSON文件专用计数器
-    //     int csv_frame_num;  // CSV文件专用计数器
-
-    //     // 新增CSV相关字段
-    //     FILE *current_diff_csv_fp; // 分离的两个文件指针
-    //     FILE *neighbor_diff_csv_fp;
-    //     int *current_diff_map;  // 存储current_diff的二维数组
-    //     int *neighbor_diff_map; // 存储neighbor_avg_diff的二维数组
-    //     int map_allocated_size; // 已分配内存大小
-
-    //     int diff_map_alloc_size; // 当前分配的大小
-    //     // int frame_initialized;   // 新增：标记当前帧是否已初始化
-    // #endif
-#if WINTER_MV_ERROR_CHECK
+#if WINTER_MV_FILES_PRINT
     FILE *custom_err_file;
     FILE *ffmpeg_err_file;
-    // int error_log_frame_count;
+#endif
+
+#if WINTER_AUTO_RENDERING
+    int prev_custom_diff_Y;         // 上一帧 diff 值
+    int last_last_err_y;            // 上一帧的 last_err_y
+    int new_round_started;          // 新一轮标志
+    int enable_auto_rendering_flag; // 是否启用自动渲染逻辑（可由外部传入）
 #endif
 } H264Context;
 

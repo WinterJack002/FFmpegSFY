@@ -57,7 +57,6 @@
 #include <libavutil/avutil.h>
 
 const uint16_t ff_h264_mb_sizes[4] = {256, 384, 512, 768};
-
 int avpriv_h264_has_num_reorder_frames(AVCodecContext *avctx)
 {
     H264Context *h = avctx->priv_data;
@@ -382,7 +381,7 @@ static av_cold int h264_decode_end(AVCodecContext *avctx)
     H264Context *h = avctx->priv_data;
     int i;
 
-#if WINTER_MV_ERROR_CHECK
+#if WINTER_MV_FILES_PRINT
     // 关闭文件
     if (h->custom_err_file)
     {
@@ -397,18 +396,6 @@ static av_cold int h264_decode_end(AVCodecContext *avctx)
         h->ffmpeg_err_file = NULL;
     }
 #endif
-    // #if WINTER_MV_ERROR_CHECK
-    //     if (h->error_log_fp)
-    //     {
-    //         fprintf(h->error_log_fp, "\n]"); // 结束JSON数组
-    //         fclose(h->error_log_fp);
-    //         h->error_log_fp = NULL;
-    //     }
-    //     av_freep(&h->error_mb_map);
-    //     av_freep(&h->current_diff_map);
-    //     av_freep(&h->neighbor_diff_map);
-    //     h->diff_map_alloc_size = 0;
-    // #endif
 
     ff_h264_remove_all_refs(h);
     ff_h264_free_tables(h);
@@ -454,79 +441,6 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "pthread_once has failed.");
         return AVERROR_UNKNOWN;
     }
-#if WINTER_MV_ERROR_CHECK
-    // 初始化错误日志相关字段
-    h->custom_err_file = NULL;
-    h->ffmpeg_err_file = NULL;
-    h->slice_ctx->error_log_frame_count = 0;
-
-    // 生成唯一文件名（添加进程ID防冲突）
-    time_t now = time(NULL);
-    char timestamp[64];
-    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", localtime(&now));
-
-    char custom_filename[128];
-    char ffmpeg_filename[128];
-    snprintf(custom_filename, sizeof(custom_filename),
-             "custom_err_mb_%s_p%d.json", timestamp, getpid());
-    snprintf(ffmpeg_filename, sizeof(ffmpeg_filename),
-             "ffmpeg_err_mb_%s_p%d.json", timestamp, getpid());
-
-    // 打开文件
-    h->custom_err_file = fopen(custom_filename, "w");
-    h->ffmpeg_err_file = fopen(ffmpeg_filename, "w");
-
-    if (h->custom_err_file)
-        fprintf(h->custom_err_file, "[\n");
-    if (h->ffmpeg_err_file)
-        fprintf(h->ffmpeg_err_file, "[\n");
-#endif
-    // #if WINTER_MV_ERROR_CHECK
-    //     // 打开错误日志文件（追加模式）
-    //     const char *log_path = "./mb_errors.json";
-
-    //     // 创建目录（递归创建多级目录）
-    //     // if (avpriv_io_mkdir("C:/h264_mv_errors", 0755) < 0)
-    //     // {
-    //     //     av_log(avctx, AV_LOG_ERROR, "无法创建目录: C:/h264_mv_errors\n");
-    //     //     return AVERROR(EIO);
-    //     // }
-
-    //     h->error_log_fp = fopen(log_path, "a");
-    //     if (!h->error_log_fp)
-    //     {
-    //         av_log(avctx, AV_LOG_ERROR, "无法打开错误日志文件: %s\n", log_path);
-    //         return AVERROR(EIO);
-    //     }
-    //     // 初始化CSV文件
-    //     h->current_diff_csv_fp = fopen("current_diff.csv", "w");
-    //     h->neighbor_diff_csv_fp = fopen("neighbor_diff.csv", "w");
-    //     if (!h->current_diff_csv_fp || !h->neighbor_diff_csv_fp)
-    //     {
-    //         av_log(avctx, AV_LOG_ERROR, "无法打开CSV文件!\n");
-    //         return AVERROR(EIO);
-    //     }
-
-    //     h->json_frame_num = 0;
-    //     h->csv_frame_num = 0;
-    //     // 写入JSON文件头（如果是新文件）
-    //     // fprintf(h->error_log_fp, "[\n"); // 开始JSON数组
-    //     // 检查文件是否为空，写入 JSON 头
-    //     if (fseek(h->error_log_fp, 0, SEEK_END) == 0)
-    //     {
-    //         if (ftell(h->error_log_fp) == 0)
-    //         {
-    //             fprintf(h->error_log_fp, "[\n");
-    //         }
-    //     }
-
-    //     // 写入CSV表头
-    //     // fprintf(h->mv_diff_csv_fp, "frame,mb_x,mb_y,current_diff,neighbor_avg_diff\n");
-
-    //     h->current_diff_map = NULL;
-    //     h->neighbor_diff_map = NULL;
-    //     h->map_allocated_size = 0;
-    // #endif
 
 #if FF_API_TICKS_PER_FRAME
     FF_DISABLE_DEPRECATION_WARNINGS
@@ -572,6 +486,38 @@ static av_cold int h264_decode_init(AVCodecContext *avctx)
                "Error resilience with slice threads is enabled. It is unsafe and unsupported and may crash. "
                "Use it at your own risk\n");
     }
+
+#if WINTER_MV_FILES_PRINT
+    // 初始化错误日志相关字段
+    h->custom_err_file = NULL;
+    h->ffmpeg_err_file = NULL;
+    h->slice_ctx->error_log_frame_count = 0;
+
+    // 生成唯一文件名（添加进程ID防冲突）
+    time_t now = time(NULL);
+    char timestamp[64];
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", localtime(&now));
+
+    char custom_filename[128];
+    char ffmpeg_filename[128];
+    snprintf(custom_filename, sizeof(custom_filename),
+             "custom_err_mb_%s_p%d.json", timestamp, getpid());
+    snprintf(ffmpeg_filename, sizeof(ffmpeg_filename),
+             "ffmpeg_err_mb_%s_p%d.json", timestamp, getpid());
+
+    // 打开文件
+    h->custom_err_file = fopen(custom_filename, "w");
+    h->ffmpeg_err_file = fopen(ffmpeg_filename, "w");
+
+    if (h->custom_err_file)
+        fprintf(h->custom_err_file, "[\n");
+    if (h->ffmpeg_err_file)
+        fprintf(h->ffmpeg_err_file, "[\n");
+#endif
+#if WINTER_AUTO_RENDERING
+    // 添加自动渲染标志初始化（供 Qt 外部传入）
+
+#endif
 
     return 0;
 }
@@ -1257,18 +1203,6 @@ static int send_next_delayed_frame(H264Context *h, AVFrame *dst_frame,
     return buf_index;
 }
 
-// #if WINTER_MV_ERROR_CHECK
-// // 在帧解码初始化时重置prev_mv（需在解码器合适位置调用）
-// static void reset_prev_mv(H264Context *h)
-// {
-//     for (int i = 0; i < h->mb_stride * h->mb_height; i++)
-//     {
-//         h->prev_mv[i][0] = INT16_MAX; // 用特殊值标记无效
-//         h->prev_mv[i][1] = INT16_MAX;
-//     }
-// }
-// #endif
-
 static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                              int *got_frame, AVPacket *avpkt)
 {
@@ -1278,67 +1212,6 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     H264Context *h = avctx->priv_data;
     int buf_index;
     int ret;
-
-    // #if WINTER_MV_ERROR_CHECK
-    //     // 确保mb_stride和mb_height有效后分配error_mb_map
-    //     if (h->mb_width > 0 && h->mb_height > 0)
-    //     {
-    //         int needed_size = h->mb_stride * h->mb_height;
-    //         // 检查是否需要重新分配
-    //         /* 分配/重分配差异数据内存 */
-    //         if (!h->current_diff_map ||
-    //             h->diff_map_alloc_size < needed_size ||
-    //             h->prev_mb_width != h->mb_width ||
-    //             h->prev_mb_height != h->mb_height)
-    //         {
-    //             av_freep(&h->current_diff_map);
-    //             av_freep(&h->neighbor_diff_map);
-
-    //             h->current_diff_map = av_malloc_array(needed_size, sizeof(int));
-    //             h->neighbor_diff_map = av_malloc_array(needed_size, sizeof(int));
-    //             h->diff_map_alloc_size = needed_size;
-
-    //             if (!h->current_diff_map || !h->neighbor_diff_map)
-    //             {
-    //                 return AVERROR(ENOMEM);
-    //             }
-
-    //             h->prev_mb_width = h->mb_width;
-    //             h->prev_mb_height = h->mb_height;
-    //         }
-
-    //         // 每帧开始时标记未初始化
-    //         h->frame_initialized = 0;
-
-    //         if (!h->error_mb_map ||
-    //             h->error_mb_stride != h->mb_stride ||
-    //             h->prev_mb_width != h->mb_width || // 新增：检查宽度变化
-    //             h->prev_mb_height != h->mb_height  // 新增：检查高度变化
-    //         )
-    //         {
-    //             av_freep(&h->error_mb_map);
-    //             h->error_mb_stride = h->mb_stride;
-    //             h->prev_mb_width = h->mb_width; // 记录当前分辨率
-    //             h->prev_mb_height = h->mb_height;
-    //             h->error_mb_map = av_mallocz(needed_size);
-    //             if (!h->error_mb_map)
-    //             {
-    //                 return AVERROR(ENOMEM);
-    //             }
-    //         }
-    //         // 清空当前帧的错误地图
-    //         memset(h->error_mb_map, 0, needed_size);
-    //     }
-    //     else
-    //     {
-    //         // 分辨率无效时清理
-    //         av_freep(&h->current_diff_map);
-    //         av_freep(&h->neighbor_diff_map);
-    //         h->diff_map_alloc_size = 0;
-    //         // 如果参数未初始化，跳过错误检查
-    //         h->error_mb_map = NULL;
-    //     }
-    // #endif
 
     h->flags = avctx->flags;
     h->setup_finished = 0;
@@ -1402,97 +1275,6 @@ static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
 
     av_assert0(pict->buf[0] || !*got_frame);
 
-    // #if WINTER_MV_ERROR_CHECK
-    //     // ---------- 输出错误宏块坐标（调试用）----------
-    //     if (h->error_mb_map)
-    //     { // 确保指针有效
-    //         for (int y = 0; y < h->mb_height; y++)
-    //         {
-    //             for (int x = 0; x < h->mb_width; x++)
-    //             {
-    //                 const int mb_xy = x + y * h->mb_stride;
-    //                 if (mb_xy < h->mb_stride * h->mb_height)
-    //                 { // 确保索引不越界
-    //                     if (h->error_mb_map[mb_xy])
-    //                     {
-    //                         av_log(avctx, AV_LOG_WARNING,
-    //                                "Error MB detected at (%d,%d)\n", x, y);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    // #endif
-
-    // #if WINTER_MV_ERROR_CHECK
-    //     // ---------- 输出错误宏块到JSON文件 ----------
-    //     if (h->error_mb_map && h->error_log_fp)
-    //     {
-    //         fprintf(h->error_log_fp, "%s\n", (h->json_frame_num == 0) ? "{" : ",\n{"); // 分隔帧
-    //         fprintf(h->error_log_fp, "\t\"frame_num\": %d,\n", h->json_frame_num);
-    //         fprintf(h->error_log_fp, "\t\"pts\": %" PRId64 ",\n", avpkt->pts);
-    //         fprintf(h->error_log_fp, "\t\"error_blocks\": [\n");
-
-    //         int first_error = 1;
-    //         for (int y = 0; y < h->mb_height; y++)
-    //         {
-    //             for (int x = 0; x < h->mb_width; x++)
-    //             {
-    //                 const int mb_xy = x + y * h->mb_stride;
-    //                 if (mb_xy < h->mb_stride * h->mb_height && h->error_mb_map[mb_xy])
-    //                 {
-    //                     fprintf(h->error_log_fp, "%s\n\t\t{ \"x\": %d, \"y\": %d }",
-    //                             first_error ? "" : ",", x, y);
-    //                     first_error = 0;
-    //                 }
-    //             }
-    //         }
-    //         fprintf(h->error_log_fp, "\n\t]\n}");
-    //         h->json_frame_num++;
-    //         fflush(h->error_log_fp); // 确保及时写入
-    //     }
-
-    //     // if (h->current_frame_num > 7)
-    //     //     exit(1);
-
-    //     if (h->current_diff_map && h->neighbor_diff_map)
-    //     {
-    //         // 写入current_diff矩阵
-    //         for (int x = 0; x < h->mb_width; x++)
-    //         { // 行=mb_x
-    //             for (int y = 0; y < h->mb_height; y++)
-    //             { // 列=mb_y
-    //                 const int mb_idx = x + y * h->mb_width;
-    //                 fprintf(h->current_diff_csv_fp, "%d%s",
-    //                         h->current_diff_map[mb_idx],
-    //                         (y == h->mb_height - 1) ? "" : ","); // 行尾不加逗号
-    //             }
-    //             fprintf(h->current_diff_csv_fp, "\n"); // 换行
-    //         }
-    //         fprintf(h->current_diff_csv_fp, "\n"); // 帧间空行
-
-    //         // 写入neighbor_diff矩阵（格式相同）
-    //         for (int x = 0; x < h->mb_width; x++)
-    //         {
-    //             for (int y = 0; y < h->mb_height; y++)
-    //             {
-    //                 const int mb_idx = x + y * h->mb_width;
-    //                 fprintf(h->neighbor_diff_csv_fp, "%d%s",
-    //                         h->neighbor_diff_map[mb_idx],
-    //                         (y == h->mb_height - 1) ? "" : ",");
-    //             }
-    //             fprintf(h->neighbor_diff_csv_fp, "\n");
-    //         }
-    //         fprintf(h->neighbor_diff_csv_fp, "\n");
-
-    //         fflush(h->current_diff_csv_fp);
-    //         fflush(h->neighbor_diff_csv_fp);
-    //     }
-
-    //     h->csv_frame_num++;
-
-    // #endif
-
     ff_h264_unref_picture(&h->last_pic_for_ec);
 
     return get_consumed_bytes(buf_index, buf_size);
@@ -1506,6 +1288,9 @@ static const AVOption h264_options[] = {
     {"nal_length_size", "nal_length_size", OFFSET(nal_length_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, VDX},
     {"enable_er", "Enable error resilience on damaged frames (unsafe)", OFFSET(enable_er), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VD},
     {"x264_build", "Assume this x264 version if no x264 version found in any SEI", OFFSET(x264_build), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, VD},
+    {NULL},
+
+    {"enable_auto_rendering_flag", "Enable custom rendering decision", OFFSET(enable_auto_rendering_flag), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM},
     {NULL},
 };
 

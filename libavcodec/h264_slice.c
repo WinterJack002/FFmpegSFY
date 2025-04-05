@@ -48,6 +48,182 @@
 #include "thread.h"
 #include "threadframe.h"
 
+#if gly_ts
+
+typedef struct AVCodecInternal
+
+{
+
+    /**
+
+     * When using frame-threaded decoding, this field is set for the first
+
+     * worker thread (e.g. to decode extradata just once).
+
+     */
+
+    int is_copy;
+
+    /**
+
+     * Audio encoders can set this flag during init to indicate that they
+
+     * want the small last frame to be padded to a multiple of pad_samples.
+
+     */
+
+    int pad_samples;
+
+    struct FramePool *pool;
+
+    void *thread_ctx;
+
+    /**
+
+     * This packet is used to hold the packet given to decoders
+
+     * implementing the .decode API; it is unused by the generic
+
+     * code for decoders implementing the .receive_frame API and
+
+     * may be freely used (but not freed) by them with the caveat
+
+     * that the packet will be unreferenced generically in
+
+     * avcodec_flush_buffers().
+
+     */
+
+    AVPacket *in_pkt;
+
+    struct AVBSFContext *bsf;
+
+    /**
+
+     * Properties (timestamps+side data) extracted from the last packet passed
+
+     * for decoding.
+
+     */
+
+    AVPacket *last_pkt_props;
+
+    /**
+
+     * temporary buffer used for encoders to store their bitstream
+
+     */
+
+    uint8_t *byte_buffer;
+
+    unsigned int byte_buffer_size;
+
+    void *frame_thread_encoder;
+
+    /**
+
+     * The input frame is stored here for encoders implementing the simple
+
+     * encode API.
+
+     *
+
+     * Not allocated in other cases.
+
+     */
+
+    AVFrame *in_frame;
+
+    /**
+
+     * When the AV_CODEC_FLAG_RECON_FRAME flag is used. the encoder should store
+
+     * here the reconstructed frame corresponding to the last returned packet.
+
+     *
+
+     * Not allocated in other cases.
+
+     */
+
+    AVFrame *recon_frame;
+
+    /**
+
+     * If this is set, then FFCodec->close (if existing) needs to be called
+
+     * for the parent AVCodecContext.
+
+     */
+
+    int needs_close;
+
+    /**
+
+     * Number of audio samples to skip at the start of the next decoded frame
+
+     */
+
+    int skip_samples;
+
+    /**
+
+     * hwaccel-specific private data
+
+     */
+
+    void *hwaccel_priv_data;
+
+    /**
+
+     * checks API usage: after codec draining, flush is required to resume operation
+
+     */
+
+    int draining;
+
+    /**
+
+     * Temporary buffers for newly received or not yet output packets/frames.
+
+     */
+
+    AVPacket *buffer_pkt;
+
+    AVFrame *buffer_frame;
+
+    int draining_done;
+
+#if FF_API_DROPCHANGED
+
+    /* used when avctx flag AV_CODEC_FLAG_DROPCHANGED is set */
+
+    int changed_frames_dropped;
+
+    int initial_format;
+
+    int initial_width, initial_height;
+
+    int initial_sample_rate;
+
+    AVChannelLayout initial_ch_layout;
+
+#endif
+
+#if CONFIG_LCMS2
+
+    FFIccContext icc; /* used to read and write embedded ICC profiles */
+
+#endif
+
+} AVCodecInternal;
+
+#endif
+
+#if WINTER_AUTO_RENDERING
+#define WINTER_CUSTOM_DIFF_THRESHOLD 15.0
+#define AV_FRAME_FLAG_CUSTOM_NORENDER (1 << 30)
+#endif
 static const uint8_t field_scan[16 + 1] = {
     0 + 0 * 4,
     0 + 1 * 4,
@@ -2991,6 +3167,77 @@ static void er_add_slice(H264SliceContext *sl,
 }
 
 #if gly_filter
+
+static int mv_test(H264SliceContext *sl)
+{
+    //  mv_cache如下所示
+
+    //  * --+--------------------
+
+    //  *   | x x x x  x  x  x  x
+
+    //  *   | x x x x  0  1  4  5
+
+    //  *   | x x x x  2  3  6  7
+
+    //  *   | x x x x  8  9 12 13
+
+    //  *   | x x x x 10 11 14 15
+
+    const int refn = sl->ref_cache[1][scan8[0]];
+    int list = 0; // 前向参考帧
+    int mv_ax1, mv_ay1, mv_ax2, mv_ay2, mv_ax3, mv_ay3, mv_ax4, mv_ay4;
+    int mv_bx1, mv_by1, mv_bx2, mv_by2, mv_bx3, mv_by3, mv_bx4, mv_by4;
+    int flag = 1;
+    int m = 2; // mv阈值
+
+    if (refn >= 0)
+    { // 参考帧存在
+        if (sl->mb_x != 0)
+        {
+            // 当前宏块左侧索引之差
+
+            mv_ax1 = sl->mv_cache[list][scan8[0]][0] - sl->mv_cache[list][scan8[0] - 1][0];
+            mv_ay1 = sl->mv_cache[list][scan8[0]][1] - sl->mv_cache[list][scan8[0] - 1][1];
+            mv_ax2 = sl->mv_cache[list][scan8[2]][0] - sl->mv_cache[list][scan8[2] - 1][0];
+            mv_ay2 = sl->mv_cache[list][scan8[2]][1] - sl->mv_cache[list][scan8[2] - 1][1];
+            mv_ax3 = sl->mv_cache[list][scan8[8]][0] - sl->mv_cache[list][scan8[8] - 1][0];
+            mv_ay3 = sl->mv_cache[list][scan8[8]][1] - sl->mv_cache[list][scan8[8] - 1][1];
+            mv_ax4 = sl->mv_cache[list][scan8[10]][0] - sl->mv_cache[list][scan8[10] - 1][0];
+            mv_ay4 = sl->mv_cache[list][scan8[10]][1] - sl->mv_cache[list][scan8[10] - 1][1];
+
+            if (abs(mv_ax1) > m || abs(mv_ax2) > m || abs(mv_ax3) > m || abs(mv_ax4) > m || abs(mv_ay1) > m || abs(mv_ay2) > m || abs(mv_ay3) > m || abs(mv_ay4) > m)
+            {
+
+                flag = -1;
+            }
+        }
+        if (sl->mb_y != 0)
+        {
+
+            mv_bx1 = sl->mv_cache[list][scan8[0]][0] - sl->mv_cache[list][scan8[0] - 8][0];
+            mv_by1 = sl->mv_cache[list][scan8[0]][1] - sl->mv_cache[list][scan8[0] - 8][1];
+            mv_bx2 = sl->mv_cache[list][scan8[1]][0] - sl->mv_cache[list][scan8[1] - 8][0];
+            mv_by2 = sl->mv_cache[list][scan8[1]][1] - sl->mv_cache[list][scan8[1] - 8][1];
+            mv_bx3 = sl->mv_cache[list][scan8[4]][0] - sl->mv_cache[list][scan8[4] - 8][0];
+            mv_by3 = sl->mv_cache[list][scan8[4]][1] - sl->mv_cache[list][scan8[4] - 8][1];
+            mv_bx4 = sl->mv_cache[list][scan8[5]][0] - sl->mv_cache[list][scan8[5] - 8][0];
+            mv_by4 = sl->mv_cache[list][scan8[5]][1] - sl->mv_cache[list][scan8[5] - 8][1];
+
+            if (abs(mv_bx1) > m || abs(mv_bx2) > m || abs(mv_bx3) > m || abs(mv_bx4) > m || abs(mv_by1) > m || abs(mv_by2) > m || abs(mv_by3) > m || abs(mv_by4) > m)
+            {
+
+                flag = -1;
+            }
+        }
+    }
+
+    return flag;
+}
+
+#endif
+
+#if gly_filter
 static int filter_test(const H264Context *h, H264SliceContext *sl)
 {
     const int mb_x = sl->mb_x;
@@ -3112,38 +3359,143 @@ static int write_variance_to_file(const H264Context *h, const char *filename)
     return 0;
 }
 #endif
-#if gly_residual
-// static int test_residual_var(int *var, H264Context *h, int mb_x, int mb_y) {
-//     int blocks_per_row = h->cur_pic.f->width / 4;
-//     int blocks_per_col = h->cur_pic.f->height / 4;
-//     int flag = 0;
-//     // 每个宏块的方差
-//     int cur = var[mb_y * blocks_per_row + mb_x];
+#if gly_new_residual
 
-//     // 定义阈值
-//     const int THRESHOLD = 600;
+static int test_residual(int *var, H264Context *h, int mb_x, int mb_y)
 
-//     // 如果是最左侧的块（第一列），跳过与左侧的比较
-//     if (mb_x > 0) {
-//         int left = var[mb_y * blocks_per_row + (mb_x - 1)];
-//         if (abs(cur - left) > THRESHOLD) {
-//             flag = -1;
-//         }
-//     }
+{
 
-//     // 如果是最上方的块（第一行），跳过与上方的比较
-//     if (mb_y > 0) {
-//         int up = var[(mb_y - 1) * blocks_per_row + mb_x];
-//         if (abs(cur - up) > THRESHOLD) {
-//             flag = -1;
-//         }
-//     }
+    const int blocks_per_row = h->cur_pic.f->width / 4;
 
-//     return flag;  // 方差差异没有超过阈值
-// }
+    // 计算宏块对应的全局4x4块起始坐标
+
+    int global_block_x = mb_x * 4;
+
+    int global_block_y = mb_y * 4;
+
+    int neighbor_count = 0;
+
+    int total_var = 0;
+
+    int threshold;
+
+    int flag = 0;
+
+    // 左方宏块 (mb_x-1, mb_y)
+
+    if (mb_x > 0)
+
+    {
+
+        int left_global_x = (mb_x - 1) * 4;
+
+        for (int by = 0; by < 4; by++)
+
+        {
+
+            for (int bx = 0; bx < 4; bx++)
+
+            {
+
+                int index = (global_block_y + by) * blocks_per_row + (left_global_x + bx);
+
+                total_var += h->cur_pic.f->var[index];
+
+                neighbor_count++;
+            }
+        }
+    }
+
+    // 上方宏块 (mb_x, mb_y-1)
+
+    if (mb_y > 0)
+
+    {
+
+        int top_global_y = (mb_y - 1) * 4;
+
+        for (int by = 0; by < 4; by++)
+
+        {
+
+            for (int bx = 0; bx < 4; bx++)
+
+            {
+
+                int index = (top_global_y + by) * blocks_per_row + (global_block_x + bx);
+
+                total_var += h->cur_pic.f->var[index];
+
+                neighbor_count++;
+            }
+        }
+    }
+
+    // 左上方宏块 (mb_x-1, mb_y-1)
+
+    if (mb_x > 0 && mb_y > 0)
+
+    {
+
+        int top_left_global_x = (mb_x - 1) * 4;
+
+        int top_left_global_y = (mb_y - 1) * 4;
+
+        for (int by = 0; by < 4; by++)
+
+        {
+
+            for (int bx = 0; bx < 4; bx++)
+
+            {
+
+                int index = (top_left_global_y + by) * blocks_per_row + (top_left_global_x + bx);
+
+                total_var += h->cur_pic.f->var[index];
+
+                neighbor_count++;
+            }
+        }
+    }
+
+    threshold = neighbor_count > 0 ? total_var / neighbor_count : 0;
+
+    // 验证宏块内16个4x4块的方差
+
+    for (int by = 0; by < 4; by++)
+
+    {
+
+        for (int bx = 0; bx < 4; bx++)
+
+        {
+
+            // 计算当前4x4块在全局var数组中的索引
+
+            int global_x = global_block_x + bx;
+
+            int global_y = global_block_y + by;
+
+            int index = global_y * blocks_per_row + global_x;
+
+            // 获取存储的方差值
+
+            int stored_var = h->cur_pic.f->var[index];
+
+            if (stored_var > 20 * threshold || stored_var > 8000)
+
+            {
+
+                flag = -1; // 方差差异超过阈值
+            }
+        }
+    }
+
+    return flag;
+}
 #endif
 #if gly_new_residual
-static int get_test_residual(const H264Context *h, H264SliceContext *sl)
+static int get_residual(const H264Context *h, H264SliceContext *sl)
 {
     const int mb_x = sl->mb_x;
     const int mb_y = sl->mb_y;
@@ -3198,18 +3550,12 @@ static int get_test_residual(const H264Context *h, H264SliceContext *sl)
             int index = global_y * blocks_per_row + global_x;
 
             h->cur_pic.f->var[index] = variance;
-            if (variance > 2000)
-            {
-                return -1;
-            }
+            // if (variance > 2000)
+            // {
+            //     return -1;
+            // }
         }
     }
-
-    // int result = test_residual_var(h->cur_pic.f->var, h, mb_x, mb_y);
-    // if (result == -1) {
-    //     return -1;  // 如果差异超过阈值，立即返回-1
-    // }
-
     return 0;
 }
 
@@ -3242,7 +3588,7 @@ static int save_residual_to_file(const H264Context *h, H264SliceContext *sl, con
 }
 #endif
 
-#if WINTER_MV_ERROR_CHECK
+#if WINTER_MV_VAR_ERROR_CHECK
 static int compute_neighbor_diff(const H264Context *h, H264SliceContext *sl,
                                  int mb_x, int mb_y, const H264Picture *ref_pic)
 {
@@ -3357,7 +3703,7 @@ static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
         // 1.mv 错误检测
         int ret = custom_mv_mb_err(h, sl, current_x, current_y);
         // 2.dct 系数错误检测（gly）
-        int ret2 = get_test_residual(h, sl);
+        int ret2 = test_residual(h->cur_pic.f->var, h, current_x, current_y);
 
         if (ret == -1 || ret2 == -1)
         {
@@ -3388,10 +3734,50 @@ static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
 
 #endif
 
+#if WINTER_AUTO_RENDERING
+static float calculate_custom_diff_Y(H264Context *h, int mb_x, int mb_y)
+{
+    H264Picture *cur_pic = h->cur_pic_ptr;
+    H264Ref *ref = &h->slice_ctx->ref_list[0][0];
+    if (!ref || !ref->parent || !ref->parent->f)
+        return 0.0f;
+
+    AVFrame *cur_f = cur_pic->f;
+    AVFrame *ref_f = ref->parent->f;
+    int width = cur_f->width;
+    int height = cur_f->height;
+
+    int mb_height = h->mb_height;
+    int y_limit = mb_y * 16;
+
+    int sum_diff = 0;
+    int count = 0;
+
+    uint8_t *cur_y = cur_f->data[0];
+    uint8_t *ref_y = ref_f->data[0];
+    int cur_ls = cur_f->linesize[0];
+    int ref_ls = ref_f->linesize[0];
+
+    for (int y = 0; y < y_limit && y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            int diff = abs(cur_y[y * cur_ls + x] - ref_y[y * ref_ls + x]);
+            sum_diff += diff;
+            count++;
+        }
+    }
+    return count > 0 ? (float)sum_diff / count : 0.0f;
+}
+#endif
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
     const H264Context *h = sl->h264;
+#if WINTER_AUTO_RENDERING
+    H264Context *mod_h = (H264Context *)h; // 临时非 const 对象，为了修改自定义参数
+#endif
+    // H264Context *h = sl->h264;
     int lf_x_start = sl->mb_x;
     int orig_deblock = sl->deblocking_filter;
     int ret;
@@ -3493,14 +3879,16 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             parse_return_code(ret, &ec);
 #endif
 
+#if gly_new_residual
+
+            get_residual(h, sl); // 计算残差
+
+#endif
+
             if (ret >= 0)
             {
                 ff_h264_hl_decode_mb(h, sl);
-#if gly_residual
-                get_residual(h, sl);
-#endif
             }
-
             // FIXME optimal? or let mb_decode decode 16x32 ?
             if (ret >= 0 && FRAME_MBAFF(h))
             { // 硬件加速，不进入
@@ -3527,6 +3915,16 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
             eos = get_cabac_terminate(&sl->cabac);
 
+#if gly_ts
+
+            if (avctx->internal->in_pkt->er_flag == 1 && sl->cabac.bytestream - sl->cabac.bytestream_start > avctx->internal->in_pkt->er_byte)
+
+            {
+
+                eos = 1;
+            }
+
+#endif
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
                 sl->cabac.bytestream > sl->cabac.bytestream_end + 2) // 处理字节流超出范围的错误
             {
@@ -3695,7 +4093,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     }
 
 finish:
-#if WINTER_MV_ERROR_CHECK
+#if WINTER_MV_VAR_ERROR_CHECK
 
     int last_err_x = er_x;
     int last_err_y = er_y;
@@ -3706,7 +4104,7 @@ finish:
 
         // 使用独立设计的find_error_boundary函数
         find_error_boundary(h, sl, er_x, er_y, &last_err_x, &last_err_y);
-
+#if WINTER_MV_FILES_PRINT
         // 记录到JSON文件
         if (h->custom_err_file && h->ffmpeg_err_file)
         {
@@ -3725,7 +4123,50 @@ finish:
             fflush(h->custom_err_file);
             fflush(h->ffmpeg_err_file);
         }
+#endif
 
+#if WINTER_AUTO_RENDERING
+        if (h->enable_auto_rendering_flag)
+        {
+            int mb_height = h->mb_height;
+            float cur_custom_diff_Y = 0.0f;
+            int cur_render_flag = 1;                      // 默认渲染
+            int threshold = WINTER_CUSTOM_DIFF_THRESHOLD; // 可调阈值
+
+            if (mod_h->last_last_err_y != -1 && last_err_y > mod_h->last_last_err_y)
+                mod_h->new_round_started = 1; // 新一轮开始
+
+            if (mod_h->new_round_started)
+            {
+                mod_h->prev_custom_diff_Y = 0;
+                mod_h->new_round_started = 0;
+            }
+
+            if (last_err_y <= mb_height / 10)
+            {
+                if (mod_h->prev_custom_diff_Y > threshold)
+                    cur_render_flag = 0;
+            }
+            else if (last_err_y >= (mb_height * 9) / 10)
+            {
+                cur_render_flag = 1;
+            }
+            else
+            {
+                cur_custom_diff_Y = calculate_custom_diff_Y(h, last_err_x, last_err_y);
+                printf("帧间像素平均差异：%.4f", cur_custom_diff_Y);
+                if (cur_custom_diff_Y > threshold)
+                    cur_render_flag = 0;
+                mod_h->prev_custom_diff_Y = cur_custom_diff_Y;
+            }
+
+            mod_h->last_last_err_y = last_err_y;
+
+            if (!cur_render_flag && h->cur_pic_ptr && h->cur_pic_ptr->f)
+                h->cur_pic_ptr->f->flags |= AV_FRAME_FLAG_CUSTOM_NORENDER;
+        }
+
+#endif
         // 如果找到了更精确的错误边界
         if (last_err_x != er_x || last_err_y != sl->mb_y)
         {
@@ -3766,9 +4207,9 @@ finish:
     if (er_flag == 2)
     { // 有错
         er_add_slice(sl, resync_mb_x, resync_mb_y, last_err_x - 1, last_err_y, ER_MB_END);
-        if (er_x >= lf_x_start)
+        if (last_err_x >= lf_x_start)
         {
-            loop_filter(h, sl, lf_x_start, er_x);
+            loop_filter(h, sl, lf_x_start, last_err_x);
         }
         sl->deblocking_filter = orig_deblock;
 #if gly_new_residual
@@ -3779,9 +4220,9 @@ finish:
     }
     // 无错
     er_add_slice(sl, resync_mb_x, resync_mb_y, last_err_x - 1, last_err_y, ER_MB_END);
-    if (er_x >= lf_x_start)
+    if (last_err_x >= lf_x_start)
     {
-        loop_filter(h, sl, lf_x_start, er_x);
+        loop_filter(h, sl, lf_x_start, last_err_x);
     }
     sl->deblocking_filter = orig_deblock;
 #if gly_new_residual

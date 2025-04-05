@@ -3286,12 +3286,14 @@ static int read_thread(void *arg)
         }
 
         ret = av_read_frame(ic, pkt);
+#if WINTER_TS_ERROR
         if (pkt->pkt_error_flag)
         {
             printf("[demux.c/av_read_frame]:av_read_frame 得到 pkt 包的情况，pkt->erreo->flag:%d, pkt->pos:%d\n", pkt->pkt_error_flag, pkt->pkt_error_pos);
             printf("[demux.c/av_read_frame]:av_read_frame 得到 pkt 包的情况，pkt_error_sum_per_pkt:%d\n", pkt->error_sum_per_pkt);
             printf("\n");
         }
+#endif
         if (ret < 0)
         {
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof)

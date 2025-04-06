@@ -50,7 +50,7 @@
 
 #define WINTER_MV_VAR_ERROR_CHECK 1
 #define WINTER_MV_FILES_PRINT 0
-#define WINTER_AUTO_RENDERING 0
+#define WINTER_AUTO_RENDERING 1
 /* Compiling in interlaced support reduces the speed
  * of progressive decoding by about 2%. */
 #define ALLOW_INTERLACE

@@ -3705,7 +3705,8 @@ static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
         // 2.dct 系数错误检测（gly）
         int ret2 = test_residual(h->cur_pic.f->var, h, current_x, current_y);
 
-        if (ret == -1 || ret2 == -1)
+        // if (ret == -1 || ret2 == -1)
+        if (ret2 == -1)
         {
             *last_err_x = current_x;
             *last_err_y = current_y;
@@ -4095,7 +4096,7 @@ finish:
 
     int last_err_x = er_x;
     int last_err_y = er_y;
-    printf("er_flag:%d", er_flag);
+    // printf("er_flag:%d", er_flag);
     // 新增的错误边界检测逻辑（使用原有设计的两个函数）
     if (er_flag == 1 || er_flag == 2)
     {
@@ -4124,7 +4125,8 @@ finish:
 #endif
 
 #if WINTER_AUTO_RENDERING
-        if (h->enable_auto_rendering_flag)
+        // if (h->enable_auto_rendering_flag)
+        if (1)
         {
             int mb_height = h->mb_height;
             float cur_custom_diff_Y = 0.0f;
@@ -4152,14 +4154,15 @@ finish:
             else
             {
                 cur_custom_diff_Y = calculate_custom_diff_Y(h, last_err_x, last_err_y);
-                printf("帧间像素平均差异：%.4f", cur_custom_diff_Y);
+                printf("帧间像素平均差异：%.3f, ", cur_custom_diff_Y);
                 if (cur_custom_diff_Y > threshold)
                     cur_render_flag = 0;
                 mod_h->prev_custom_diff_Y = cur_custom_diff_Y;
             }
 
             mod_h->last_last_err_y = last_err_y;
-
+            // printf("cur_custom_diff_Y:%.3f ", cur_custom_diff_Y);
+            printf("cur_render_flag:%d \n", cur_render_flag);
             if (!cur_render_flag && h->cur_pic_ptr && h->cur_pic_ptr->f)
                 h->cur_pic_ptr->f->flags |= AV_FRAME_FLAG_CUSTOM_NORENDER;
         }
@@ -4168,8 +4171,8 @@ finish:
         // 如果找到了更精确的错误边界
         if (last_err_x != er_x || last_err_y != sl->mb_y)
         {
-            av_log(h->avctx, AV_LOG_WARNING, "Refined error boundary from (%d,%d) to (%d,%d)\n",
-                   sl->mb_x, er_y, last_err_x, last_err_y);
+            // av_log(h->avctx, AV_LOG_WARNING, "Refined error boundary from (%d,%d) to (%d,%d)\n",
+            //        sl->mb_x, er_y, last_err_x, last_err_y);
 
             /* 清除原错误标记（使用现有error_status_table）
             for (int y = sl->resync_mb_y; y <= sl->mb_y; y++)

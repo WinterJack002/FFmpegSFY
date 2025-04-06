@@ -40,10 +40,10 @@
 static inline int get_lowest_part_list_y(H264SliceContext *sl,
                                          int n, int height, int y_offset, int list)
 {
-    int raw_my             = sl->mv_cache[list][scan8[n]][1];
+    int raw_my = sl->mv_cache[list][scan8[n]][1];
     int filter_height_down = (raw_my & 3) ? 3 : 0;
-    int full_my            = (raw_my >> 2) + y_offset;
-    int bottom             = full_my + filter_height_down + height;
+    int full_my = (raw_my >> 2) + y_offset;
+    int bottom = full_my + filter_height_down + height;
 
     av_assert2(height >= 0);
 
@@ -59,7 +59,8 @@ static inline void get_lowest_part_y(const H264Context *h, H264SliceContext *sl,
 
     y_offset += 16 * (sl->mb_y >> MB_FIELD(sl));
 
-    if (list0) {
+    if (list0)
+    {
         int ref_n = sl->ref_cache[0][scan8[n]];
         H264Ref *ref = &sl->ref_list[0][ref_n];
 
@@ -67,7 +68,8 @@ static inline void get_lowest_part_y(const H264Context *h, H264SliceContext *sl,
         // Don't try to wait on these as it will cause a deadlock.
         // Fields can wait on each other, though.
         if (ref->parent->tf.progress != h->cur_pic.tf.progress ||
-            (ref->reference & 3) != h->picture_structure) {
+            (ref->reference & 3) != h->picture_structure)
+        {
             my = get_lowest_part_list_y(sl, n, height, y_offset, 0);
             if (refs[0][ref_n] < 0)
                 nrefs[0] += 1;
@@ -75,12 +77,14 @@ static inline void get_lowest_part_y(const H264Context *h, H264SliceContext *sl,
         }
     }
 
-    if (list1) {
-        int ref_n    = sl->ref_cache[1][scan8[n]];
+    if (list1)
+    {
+        int ref_n = sl->ref_cache[1][scan8[n]];
         H264Ref *ref = &sl->ref_list[1][ref_n];
 
         if (ref->parent->tf.progress != h->cur_pic.tf.progress ||
-            (ref->reference & 3) != h->picture_structure) {
+            (ref->reference & 3) != h->picture_structure)
+        {
             my = get_lowest_part_list_y(sl, n, height, y_offset, 1);
             if (refs[1][ref_n] < 0)
                 nrefs[1] += 1;
@@ -96,43 +100,54 @@ static inline void get_lowest_part_y(const H264Context *h, H264SliceContext *sl,
  */
 static void await_references(const H264Context *h, H264SliceContext *sl)
 {
-    const int mb_xy   = sl->mb_xy;
+    const int mb_xy = sl->mb_xy;
     const int mb_type = h->cur_pic.mb_type[mb_xy];
     int16_t refs[2][48];
-    int nrefs[2] = { 0 };
+    int nrefs[2] = {0};
     int ref, list;
 
     memset(refs, -1, sizeof(refs));
 
-    if (IS_16X16(mb_type)) {
+    if (IS_16X16(mb_type))
+    {
         get_lowest_part_y(h, sl, refs, 0, 16, 0,
                           IS_DIR(mb_type, 0, 0), IS_DIR(mb_type, 0, 1), nrefs);
-    } else if (IS_16X8(mb_type)) {
+    }
+    else if (IS_16X8(mb_type))
+    {
         get_lowest_part_y(h, sl, refs, 0, 8, 0,
                           IS_DIR(mb_type, 0, 0), IS_DIR(mb_type, 0, 1), nrefs);
         get_lowest_part_y(h, sl, refs, 8, 8, 8,
                           IS_DIR(mb_type, 1, 0), IS_DIR(mb_type, 1, 1), nrefs);
-    } else if (IS_8X16(mb_type)) {
+    }
+    else if (IS_8X16(mb_type))
+    {
         get_lowest_part_y(h, sl, refs, 0, 16, 0,
                           IS_DIR(mb_type, 0, 0), IS_DIR(mb_type, 0, 1), nrefs);
         get_lowest_part_y(h, sl, refs, 4, 16, 0,
                           IS_DIR(mb_type, 1, 0), IS_DIR(mb_type, 1, 1), nrefs);
-    } else {
+    }
+    else
+    {
         int i;
 
         av_assert2(IS_8X8(mb_type));
 
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < 4; i++)
+        {
             const int sub_mb_type = sl->sub_mb_type[i];
-            const int n           = 4 * i;
-            int y_offset          = (i & 2) << 2;
+            const int n = 4 * i;
+            int y_offset = (i & 2) << 2;
 
-            if (IS_SUB_8X8(sub_mb_type)) {
+            if (IS_SUB_8X8(sub_mb_type))
+            {
                 get_lowest_part_y(h, sl, refs, n, 8, y_offset,
                                   IS_DIR(sub_mb_type, 0, 0),
                                   IS_DIR(sub_mb_type, 0, 1),
                                   nrefs);
-            } else if (IS_SUB_8X4(sub_mb_type)) {
+            }
+            else if (IS_SUB_8X4(sub_mb_type))
+            {
                 get_lowest_part_y(h, sl, refs, n, 4, y_offset,
                                   IS_DIR(sub_mb_type, 0, 0),
                                   IS_DIR(sub_mb_type, 0, 1),
@@ -141,7 +156,9 @@ static void await_references(const H264Context *h, H264SliceContext *sl)
                                   IS_DIR(sub_mb_type, 0, 0),
                                   IS_DIR(sub_mb_type, 0, 1),
                                   nrefs);
-            } else if (IS_SUB_4X8(sub_mb_type)) {
+            }
+            else if (IS_SUB_4X8(sub_mb_type))
+            {
                 get_lowest_part_y(h, sl, refs, n, 8, y_offset,
                                   IS_DIR(sub_mb_type, 0, 0),
                                   IS_DIR(sub_mb_type, 0, 1),
@@ -150,10 +167,13 @@ static void await_references(const H264Context *h, H264SliceContext *sl)
                                   IS_DIR(sub_mb_type, 0, 0),
                                   IS_DIR(sub_mb_type, 0, 1),
                                   nrefs);
-            } else {
+            }
+            else
+            {
                 int j;
                 av_assert2(IS_SUB_4X4(sub_mb_type));
-                for (j = 0; j < 4; j++) {
+                for (j = 0; j < 4; j++)
+                {
                     int sub_y_offset = y_offset + 2 * (j & 2);
                     get_lowest_part_y(h, sl, refs, n + j, 4, sub_y_offset,
                                       IS_DIR(sub_mb_type, 0, 0),
@@ -165,18 +185,21 @@ static void await_references(const H264Context *h, H264SliceContext *sl)
     }
 
     for (list = sl->list_count - 1; list >= 0; list--)
-        for (ref = 0; ref < 48 && nrefs[list]; ref++) {
+        for (ref = 0; ref < 48 && nrefs[list]; ref++)
+        {
             int row = refs[list][ref];
-            if (row >= 0) {
-                H264Ref *ref_pic  = &sl->ref_list[list][ref];
-                int ref_field         = ref_pic->reference - 1;
+            if (row >= 0)
+            {
+                H264Ref *ref_pic = &sl->ref_list[list][ref];
+                int ref_field = ref_pic->reference - 1;
                 int ref_field_picture = ref_pic->parent->field_picture;
-                int pic_height        = 16 * h->mb_height >> ref_field_picture;
+                int pic_height = 16 * h->mb_height >> ref_field_picture;
 
                 row <<= MB_MBAFF(sl);
                 nrefs[list]--;
 
-                if (!FIELD_PICTURE(h) && ref_field_picture) { // frame referencing two fields
+                if (!FIELD_PICTURE(h) && ref_field_picture)
+                { // frame referencing two fields
                     av_assert2((ref_pic->parent->reference & 3) == 3);
                     ff_thread_await_progress(&ref_pic->parent->tf,
                                              FFMIN((row >> 1) - !(row & 1),
@@ -185,16 +208,22 @@ static void await_references(const H264Context *h, H264SliceContext *sl)
                     ff_thread_await_progress(&ref_pic->parent->tf,
                                              FFMIN((row >> 1), pic_height - 1),
                                              0);
-                } else if (FIELD_PICTURE(h) && !ref_field_picture) { // field referencing one field of a frame
+                }
+                else if (FIELD_PICTURE(h) && !ref_field_picture)
+                { // field referencing one field of a frame
                     ff_thread_await_progress(&ref_pic->parent->tf,
                                              FFMIN(row * 2 + ref_field,
                                                    pic_height - 1),
                                              0);
-                } else if (FIELD_PICTURE(h)) {
+                }
+                else if (FIELD_PICTURE(h))
+                {
                     ff_thread_await_progress(&ref_pic->parent->tf,
                                              FFMIN(row, pic_height - 1),
                                              ref_field);
-                } else {
+                }
+                else
+                {
                     ff_thread_await_progress(&ref_pic->parent->tf,
                                              FFMIN(row, pic_height - 1),
                                              0);
@@ -214,18 +243,18 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
                                          h264_chroma_mc_func chroma_op,
                                          int pixel_shift, int chroma_idc)
 {
-    const int mx      = sl->mv_cache[list][scan8[n]][0] + src_x_offset * 8;
-    int my            = sl->mv_cache[list][scan8[n]][1] + src_y_offset * 8;
+    const int mx = sl->mv_cache[list][scan8[n]][0] + src_x_offset * 8;
+    int my = sl->mv_cache[list][scan8[n]][1] + src_y_offset * 8;
     const int luma_xy = (mx & 3) + ((my & 3) << 2);
-    ptrdiff_t offset  = (mx >> 2) * (1 << pixel_shift) + (my >> 2) * sl->mb_linesize;
-    uint8_t *src_y    = pic->data[0] + offset;
+    ptrdiff_t offset = (mx >> 2) * (1 << pixel_shift) + (my >> 2) * sl->mb_linesize;
+    uint8_t *src_y = pic->data[0] + offset;
     uint8_t *src_cb, *src_cr;
-    int extra_width  = 0;
+    int extra_width = 0;
     int extra_height = 0;
     int emu = 0;
-    const int full_mx    = mx >> 2;
-    const int full_my    = my >> 2;
-    const int pic_width  = 16 * h->mb_width;
+    const int full_mx = mx >> 2;
+    const int full_my = my >> 2;
+    const int pic_width = 16 * h->mb_width;
     const int pic_height = 16 * h->mb_height >> MB_FIELD(sl);
     int ysh;
 
@@ -234,17 +263,18 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
     if (my & 7)
         extra_height -= 3;
 
-    if (full_mx                <          0 - extra_width  ||
-        full_my                <          0 - extra_height ||
-        full_mx + 16 /*FIXME*/ > pic_width  + extra_width  ||
-        full_my + 16 /*FIXME*/ > pic_height + extra_height) {
+    if (full_mx < 0 - extra_width ||
+        full_my < 0 - extra_height ||
+        full_mx + 16 /*FIXME*/ > pic_width + extra_width ||
+        full_my + 16 /*FIXME*/ > pic_height + extra_height)
+    {
         h->vdsp.emulated_edge_mc(sl->edge_emu_buffer,
                                  src_y - (2 << pixel_shift) - 2 * sl->mb_linesize,
                                  sl->mb_linesize, sl->mb_linesize,
                                  16 + 5, 16 + 5 /*FIXME*/, full_mx - 2,
                                  full_my - 2, pic_width, pic_height);
         src_y = sl->edge_emu_buffer + (2 << pixel_shift) + 2 * sl->mb_linesize;
-        emu   = 1;
+        emu = 1;
     }
 
     qpix_op[luma_xy](dest_y, src_y, sl->mb_linesize); // FIXME try variable height perhaps?
@@ -254,9 +284,11 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
     if (CONFIG_GRAY && h->flags & AV_CODEC_FLAG_GRAY)
         return;
 
-    if (chroma_idc == 3 /* yuv444 */) {
+    if (chroma_idc == 3 /* yuv444 */)
+    {
         src_cb = pic->data[1] + offset;
-        if (emu) {
+        if (emu)
+        {
             h->vdsp.emulated_edge_mc(sl->edge_emu_buffer,
                                      src_cb - (2 << pixel_shift) - 2 * sl->mb_linesize,
                                      sl->mb_linesize, sl->mb_linesize,
@@ -270,7 +302,8 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
             qpix_op[luma_xy](dest_cb + delta, src_cb + delta, sl->mb_linesize);
 
         src_cr = pic->data[2] + offset;
-        if (emu) {
+        if (emu)
+        {
             h->vdsp.emulated_edge_mc(sl->edge_emu_buffer,
                                      src_cr - (2 << pixel_shift) - 2 * sl->mb_linesize,
                                      sl->mb_linesize, sl->mb_linesize,
@@ -286,9 +319,10 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
     }
 
     ysh = 3 - (chroma_idc == 2 /* yuv422 */);
-    if (chroma_idc == 1 /* yuv420 */ && MB_FIELD(sl)) {
+    if (chroma_idc == 1 /* yuv420 */ && MB_FIELD(sl))
+    {
         // chroma offset when predicting from a field of opposite parity
-        my  += 2 * ((sl->mb_y & 1) - (pic->reference - 1));
+        my += 2 * ((sl->mb_y & 1) - (pic->reference - 1));
         emu |= (my >> 3) < 0 || (my >> 3) + 8 >= (pic_height >> 1);
     }
 
@@ -297,7 +331,8 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
     src_cr = pic->data[2] + ((mx >> 3) * (1 << pixel_shift)) +
              (my >> ysh) * sl->mb_uvlinesize;
 
-    if (emu) {
+    if (emu)
+    {
         h->vdsp.emulated_edge_mc(sl->edge_emu_buffer, src_cb,
                                  sl->mb_uvlinesize, sl->mb_uvlinesize,
                                  9, 8 * chroma_idc + 1, (mx >> 3), (my >> ysh),
@@ -308,7 +343,8 @@ static av_always_inline void mc_dir_part(const H264Context *h, H264SliceContext 
               height >> (chroma_idc == 1 /* yuv420 */),
               mx & 7, ((unsigned)my << (chroma_idc == 2 /* yuv422 */)) & 7);
 
-    if (emu) {
+    if (emu)
+    {
         h->vdsp.emulated_edge_mc(sl->edge_emu_buffer, src_cr,
                                  sl->mb_uvlinesize, sl->mb_uvlinesize,
                                  9, 8 * chroma_idc + 1, (mx >> 3), (my >> ysh),
@@ -332,34 +368,41 @@ static av_always_inline void mc_part_std(const H264Context *h, H264SliceContext 
                                          int list0, int list1,
                                          int pixel_shift, int chroma_idc)
 {
-    const qpel_mc_func *qpix_op   = qpix_put;
+    const qpel_mc_func *qpix_op = qpix_put;
     h264_chroma_mc_func chroma_op = chroma_put;
 
     dest_y += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
-    if (chroma_idc == 3 /* yuv444 */) {
+    if (chroma_idc == 3 /* yuv444 */)
+    {
         dest_cb += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
         dest_cr += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
-    } else if (chroma_idc == 2 /* yuv422 */) {
+    }
+    else if (chroma_idc == 2 /* yuv422 */)
+    {
         dest_cb += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
         dest_cr += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
-    } else { /* yuv420 */
+    }
+    else
+    { /* yuv420 */
         dest_cb += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
         dest_cr += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
     }
     x_offset += 8 * sl->mb_x;
     y_offset += 8 * (sl->mb_y >> MB_FIELD(sl));
 
-    if (list0) {
+    if (list0)
+    {
         H264Ref *ref = &sl->ref_list[0][sl->ref_cache[0][scan8[n]]];
         mc_dir_part(h, sl, ref, n, square, height, delta, 0,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
                     qpix_op, chroma_op, pixel_shift, chroma_idc);
 
-        qpix_op   = qpix_avg;
+        qpix_op = qpix_avg;
         chroma_op = chroma_avg;
     }
 
-    if (list1) {
+    if (list1)
+    {
         H264Ref *ref = &sl->ref_list[1][sl->ref_cache[1][scan8[n]]];
         mc_dir_part(h, sl, ref, n, square, height, delta, 1,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
@@ -385,32 +428,38 @@ static av_always_inline void mc_part_weighted(const H264Context *h, H264SliceCon
     int chroma_height;
 
     dest_y += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
-    if (chroma_idc == 3 /* yuv444 */) {
-        chroma_height     = height;
+    if (chroma_idc == 3 /* yuv444 */)
+    {
+        chroma_height = height;
         chroma_weight_avg = luma_weight_avg;
-        chroma_weight_op  = luma_weight_op;
+        chroma_weight_op = luma_weight_op;
         dest_cb += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
         dest_cr += (2 * x_offset << pixel_shift) + 2 * y_offset * sl->mb_linesize;
-    } else if (chroma_idc == 2 /* yuv422 */) {
+    }
+    else if (chroma_idc == 2 /* yuv422 */)
+    {
         chroma_height = height;
-        dest_cb      += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
-        dest_cr      += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
-    } else { /* yuv420 */
+        dest_cb += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
+        dest_cr += (x_offset << pixel_shift) + 2 * y_offset * sl->mb_uvlinesize;
+    }
+    else
+    { /* yuv420 */
         chroma_height = height >> 1;
-        dest_cb      += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
-        dest_cr      += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
+        dest_cb += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
+        dest_cr += (x_offset << pixel_shift) + y_offset * sl->mb_uvlinesize;
     }
     x_offset += 8 * sl->mb_x;
     y_offset += 8 * (sl->mb_y >> MB_FIELD(sl));
 
-    if (list0 && list1) {
+    if (list0 && list1)
+    {
         /* don't optimize for luma-only case, since B-frames usually
          * use implicit weights => chroma too. */
         uint8_t *tmp_cb = sl->bipred_scratchpad;
         uint8_t *tmp_cr = sl->bipred_scratchpad + (16 << pixel_shift);
-        uint8_t *tmp_y  = sl->bipred_scratchpad + 16 * sl->mb_uvlinesize;
-        int refn0       = sl->ref_cache[0][scan8[n]];
-        int refn1       = sl->ref_cache[1][scan8[n]];
+        uint8_t *tmp_y = sl->bipred_scratchpad + 16 * sl->mb_uvlinesize;
+        int refn0 = sl->ref_cache[0][scan8[n]];
+        int refn1 = sl->ref_cache[1][scan8[n]];
 
         mc_dir_part(h, sl, &sl->ref_list[0][refn0], n, square, height, delta, 0,
                     dest_y, dest_cb, dest_cr,
@@ -421,42 +470,49 @@ static av_always_inline void mc_part_weighted(const H264Context *h, H264SliceCon
                     x_offset, y_offset, qpix_put, chroma_put,
                     pixel_shift, chroma_idc);
 
-        if (sl->pwt.use_weight == 2) {
+        if (sl->pwt.use_weight == 2)
+        {
             int weight0 = sl->pwt.implicit_weight[refn0][refn1][sl->mb_y & 1];
             int weight1 = 64 - weight0;
             luma_weight_avg(dest_y, tmp_y, sl->mb_linesize,
                             height, 5, weight0, weight1, 0);
-            if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY)) {
+            if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY))
+            {
                 chroma_weight_avg(dest_cb, tmp_cb, sl->mb_uvlinesize,
                                   chroma_height, 5, weight0, weight1, 0);
                 chroma_weight_avg(dest_cr, tmp_cr, sl->mb_uvlinesize,
                                   chroma_height, 5, weight0, weight1, 0);
             }
-        } else {
+        }
+        else
+        {
             luma_weight_avg(dest_y, tmp_y, sl->mb_linesize, height,
                             sl->pwt.luma_log2_weight_denom,
                             sl->pwt.luma_weight[refn0][0][0],
                             sl->pwt.luma_weight[refn1][1][0],
                             sl->pwt.luma_weight[refn0][0][1] +
-                            sl->pwt.luma_weight[refn1][1][1]);
-            if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY)) {
+                                sl->pwt.luma_weight[refn1][1][1]);
+            if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY))
+            {
                 chroma_weight_avg(dest_cb, tmp_cb, sl->mb_uvlinesize, chroma_height,
                                   sl->pwt.chroma_log2_weight_denom,
                                   sl->pwt.chroma_weight[refn0][0][0][0],
                                   sl->pwt.chroma_weight[refn1][1][0][0],
                                   sl->pwt.chroma_weight[refn0][0][0][1] +
-                                  sl->pwt.chroma_weight[refn1][1][0][1]);
+                                      sl->pwt.chroma_weight[refn1][1][0][1]);
                 chroma_weight_avg(dest_cr, tmp_cr, sl->mb_uvlinesize, chroma_height,
                                   sl->pwt.chroma_log2_weight_denom,
                                   sl->pwt.chroma_weight[refn0][0][1][0],
                                   sl->pwt.chroma_weight[refn1][1][1][0],
                                   sl->pwt.chroma_weight[refn0][0][1][1] +
-                                  sl->pwt.chroma_weight[refn1][1][1][1]);
+                                      sl->pwt.chroma_weight[refn1][1][1][1]);
             }
         }
-    } else {
-        int list     = list1 ? 1 : 0;
-        int refn     = sl->ref_cache[list][scan8[n]];
+    }
+    else
+    {
+        int list = list1 ? 1 : 0;
+        int refn = sl->ref_cache[list][scan8[n]];
         H264Ref *ref = &sl->ref_list[list][refn];
         mc_dir_part(h, sl, ref, n, square, height, delta, list,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
@@ -466,8 +522,10 @@ static av_always_inline void mc_part_weighted(const H264Context *h, H264SliceCon
                        sl->pwt.luma_log2_weight_denom,
                        sl->pwt.luma_weight[refn][list][0],
                        sl->pwt.luma_weight[refn][list][1]);
-        if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY)) {
-            if (sl->pwt.use_weight_chroma) {
+        if (!CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY))
+        {
+            if (sl->pwt.use_weight_chroma)
+            {
                 chroma_weight_op(dest_cb, sl->mb_uvlinesize, chroma_height,
                                  sl->pwt.chroma_log2_weight_denom,
                                  sl->pwt.chroma_weight[refn][list][0][0],
@@ -488,19 +546,23 @@ static av_always_inline void prefetch_motion(const H264Context *h, H264SliceCont
     /* fetch pixels for estimated mv 4 macroblocks ahead
      * optimized for 64byte cache lines */
     const int refn = sl->ref_cache[list][scan8[0]];
-    if (refn >= 0) {
-        const int mx  = (sl->mv_cache[list][scan8[0]][0] >> 2) + 16 * sl->mb_x + 8;
-        const int my  = (sl->mv_cache[list][scan8[0]][1] >> 2) + 16 * sl->mb_y;
+    if (refn >= 0)
+    {
+        const int mx = (sl->mv_cache[list][scan8[0]][0] >> 2) + 16 * sl->mb_x + 8;
+        const int my = (sl->mv_cache[list][scan8[0]][1] >> 2) + 16 * sl->mb_y;
         uint8_t **src = sl->ref_list[list][refn].data;
-        int off       =  mx * (1<< pixel_shift) +
-                        (my + (sl->mb_x & 3) * 4) * sl->mb_linesize +
-                        (64 << pixel_shift);
+        int off = mx * (1 << pixel_shift) +
+                  (my + (sl->mb_x & 3) * 4) * sl->mb_linesize +
+                  (64 << pixel_shift);
         h->vdsp.prefetch(src[0] + off, sl->linesize, 4);
-        if (chroma_idc == 3 /* yuv444 */) {
+        if (chroma_idc == 3 /* yuv444 */)
+        {
             h->vdsp.prefetch(src[1] + off, sl->linesize, 4);
             h->vdsp.prefetch(src[2] + off, sl->linesize, 4);
-        } else {
-            off= ((mx>>1)+64) * (1<<pixel_shift) + ((my>>1) + (sl->mb_x&7))*sl->uvlinesize;
+        }
+        else
+        {
+            off = ((mx >> 1) + 64) * (1 << pixel_shift) + ((my >> 1) + (sl->mb_x & 7)) * sl->uvlinesize;
             h->vdsp.prefetch(src[1] + off, src[2] - src[1], 2);
         }
     }
@@ -519,57 +581,75 @@ static av_always_inline void xchg_mb_border(const H264Context *h, H264SliceConte
     uint8_t *top_border_m1;
     uint8_t *top_border;
 
-    if (!simple && FRAME_MBAFF(h)) {
-        if (sl->mb_y & 1) {
+    if (!simple && FRAME_MBAFF(h))
+    {
+        if (sl->mb_y & 1)
+        {
             if (!MB_MBAFF(sl))
                 return;
-        } else {
+        }
+        else
+        {
             top_idx = MB_MBAFF(sl) ? 0 : 1;
         }
     }
 
-    if (sl->deblocking_filter == 2) {
+    if (sl->deblocking_filter == 2)
+    {
         deblock_topleft = h->slice_table[sl->mb_xy - 1 - h->mb_stride] == sl->slice_num;
-        deblock_top     = sl->top_type;
-    } else {
+        deblock_top = sl->top_type;
+    }
+    else
+    {
         deblock_topleft = (sl->mb_x > 0);
-        deblock_top     = (sl->mb_y > !!MB_FIELD(sl));
+        deblock_top = (sl->mb_y > !!MB_FIELD(sl));
     }
 
-    src_y  -= linesize   + 1 + pixel_shift;
+    src_y -= linesize + 1 + pixel_shift;
     src_cb -= uvlinesize + 1 + pixel_shift;
     src_cr -= uvlinesize + 1 + pixel_shift;
 
     top_border_m1 = sl->top_borders[top_idx][sl->mb_x - 1];
-    top_border    = sl->top_borders[top_idx][sl->mb_x];
+    top_border = sl->top_borders[top_idx][sl->mb_x];
 
-#define XCHG(a, b, xchg)                        \
-    if (pixel_shift) {                          \
-        if (xchg) {                             \
-            AV_SWAP64(b + 0, a + 0);            \
-            AV_SWAP64(b + 8, a + 8);            \
-        } else {                                \
-            AV_COPY128(b, a);                   \
-        }                                       \
-    } else if (xchg)                            \
-        AV_SWAP64(b, a);                        \
-    else                                        \
+#define XCHG(a, b, xchg)             \
+    if (pixel_shift)                 \
+    {                                \
+        if (xchg)                    \
+        {                            \
+            AV_SWAP64(b + 0, a + 0); \
+            AV_SWAP64(b + 8, a + 8); \
+        }                            \
+        else                         \
+        {                            \
+            AV_COPY128(b, a);        \
+        }                            \
+    }                                \
+    else if (xchg)                   \
+        AV_SWAP64(b, a);             \
+    else                             \
         AV_COPY64(b, a);
 
-    if (deblock_top) {
-        if (deblock_topleft) {
+    if (deblock_top)
+    {
+        if (deblock_topleft)
+        {
             XCHG(top_border_m1 + (8 << pixel_shift),
                  src_y - (7 << pixel_shift), 1);
         }
         XCHG(top_border + (0 << pixel_shift), src_y + (1 << pixel_shift), xchg);
         XCHG(top_border + (8 << pixel_shift), src_y + (9 << pixel_shift), 1);
-        if (sl->mb_x + 1 < h->mb_width) {
+        if (sl->mb_x + 1 < h->mb_width)
+        {
             XCHG(sl->top_borders[top_idx][sl->mb_x + 1],
                  src_y + (17 << pixel_shift), 1);
         }
-        if (simple || !CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY)) {
-            if (chroma444) {
-                if (deblock_topleft) {
+        if (simple || !CONFIG_GRAY || !(h->flags & AV_CODEC_FLAG_GRAY))
+        {
+            if (chroma444)
+            {
+                if (deblock_topleft)
+                {
                     XCHG(top_border_m1 + (24 << pixel_shift), src_cb - (7 << pixel_shift), 1);
                     XCHG(top_border_m1 + (40 << pixel_shift), src_cr - (7 << pixel_shift), 1);
                 }
@@ -577,12 +657,16 @@ static av_always_inline void xchg_mb_border(const H264Context *h, H264SliceConte
                 XCHG(top_border + (24 << pixel_shift), src_cb + (9 << pixel_shift), 1);
                 XCHG(top_border + (32 << pixel_shift), src_cr + (1 << pixel_shift), xchg);
                 XCHG(top_border + (40 << pixel_shift), src_cr + (9 << pixel_shift), 1);
-                if (sl->mb_x + 1 < h->mb_width) {
+                if (sl->mb_x + 1 < h->mb_width)
+                {
                     XCHG(sl->top_borders[top_idx][sl->mb_x + 1] + (16 << pixel_shift), src_cb + (17 << pixel_shift), 1);
                     XCHG(sl->top_borders[top_idx][sl->mb_x + 1] + (32 << pixel_shift), src_cr + (17 << pixel_shift), 1);
                 }
-            } else {
-                if (deblock_topleft) {
+            }
+            else
+            {
+                if (deblock_topleft)
+                {
                     XCHG(top_border_m1 + (16 << pixel_shift), src_cb - (7 << pixel_shift), 1);
                     XCHG(top_border_m1 + (24 << pixel_shift), src_cr - (7 << pixel_shift), 1);
                 }
@@ -596,18 +680,22 @@ static av_always_inline void xchg_mb_border(const H264Context *h, H264SliceConte
 static av_always_inline int dctcoef_get(int16_t *mb, int high_bit_depth,
                                         int index)
 {
-    if (high_bit_depth) {
+    if (high_bit_depth)
+    {
         return AV_RN32A(((int32_t *)mb) + index);
-    } else
+    }
+    else
         return AV_RN16A(mb + index);
 }
 
 static av_always_inline void dctcoef_set(int16_t *mb, int high_bit_depth,
                                          int index, int value)
 {
-    if (high_bit_depth) {
+    if (high_bit_depth)
+    {
         AV_WN32A(((int32_t *)mb) + index, value);
-    } else
+    }
+    else
         AV_WN16A(mb + index, value);
 }
 
@@ -625,74 +713,42 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
     int i;
     int qscale = p == 0 ? sl->qscale : sl->chroma_qp[p - 1];
     block_offset += 16 * p;
-    if (IS_INTRA4x4(mb_type)) {
-        if (IS_8x8DCT(mb_type)) {
-            if (transform_bypass) {
+    if (IS_INTRA4x4(mb_type))
+    {
+        if (IS_8x8DCT(mb_type))
+        {
+            if (transform_bypass)
+            {
                 idct_dc_add =
-                idct_add    = h->h264dsp.h264_add_pixels8_clear;
-            } else {
-                idct_dc_add = h->h264dsp.h264_idct8_dc_add;
-                idct_add    = h->h264dsp.h264_idct8_add;
+                    idct_add = h->h264dsp.h264_add_pixels8_clear;
             }
-            for (i = 0; i < 16; i += 4) {
+            else
+            {
+                idct_dc_add = h->h264dsp.h264_idct8_dc_add;
+                idct_add = h->h264dsp.h264_idct8_add;
+            }
+            for (i = 0; i < 16; i += 4)
+            {
                 uint8_t *const ptr = dest_y + block_offset[i];
-                const int dir      = sl->intra4x4_pred_mode_cache[scan8[i]];
-                if (transform_bypass && h->ps.sps->profile_idc == 244 && dir <= 1) {
-                    if (h->x264_build < 151U) {
+                const int dir = sl->intra4x4_pred_mode_cache[scan8[i]];
+                if (transform_bypass && h->ps.sps->profile_idc == 244 && dir <= 1)
+                {
+                    if (h->x264_build < 151U)
+                    {
                         h->hpc.pred8x8l_add[dir](ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
-                    } else
+                    }
+                    else
                         h->hpc.pred8x8l_filter_add[dir](ptr, sl->mb + (i * 16 + p * 256 << pixel_shift),
-                                                        (sl-> topleft_samples_available << i) & 0x8000,
+                                                        (sl->topleft_samples_available << i) & 0x8000,
                                                         (sl->topright_samples_available << i) & 0x4000, linesize);
-                } else {
+                }
+                else
+                {
                     const int nnz = sl->non_zero_count_cache[scan8[i + p * 16]];
                     h->hpc.pred8x8l[dir](ptr, (sl->topleft_samples_available << i) & 0x8000,
                                          (sl->topright_samples_available << i) & 0x4000, linesize);
-                    if (nnz) {
-                        if (nnz == 1 && dctcoef_get(sl->mb, pixel_shift, i * 16 + p * 256))
-                            idct_dc_add(ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
-                        else
-                            idct_add(ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
-                    }
-                }
-            }
-        } else {
-            if (transform_bypass) {
-                idct_dc_add  =
-                idct_add     = h->h264dsp.h264_add_pixels4_clear;
-            } else {
-                idct_dc_add = h->h264dsp.h264_idct_dc_add;
-                idct_add    = h->h264dsp.h264_idct_add;
-            }
-            for (i = 0; i < 16; i++) {
-                uint8_t *const ptr = dest_y + block_offset[i];
-                const int dir      = sl->intra4x4_pred_mode_cache[scan8[i]];
-
-                if (transform_bypass && h->ps.sps->profile_idc == 244 && dir <= 1) {
-                    h->hpc.pred4x4_add[dir](ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
-                } else {
-                    uint8_t *topright;
-                    int nnz, tr;
-                    uint64_t tr_high;
-                    if (dir == DIAG_DOWN_LEFT_PRED || dir == VERT_LEFT_PRED) {
-                        const int topright_avail = (sl->topright_samples_available << i) & 0x8000;
-                        av_assert2(sl->mb_y || linesize <= block_offset[i]);
-                        if (!topright_avail) {
-                            if (pixel_shift) {
-                                tr_high  = ((uint16_t *)ptr)[3 - linesize / 2] * 0x0001000100010001ULL;
-                                topright = (uint8_t *)&tr_high;
-                            } else {
-                                tr       = ptr[3 - linesize] * 0x01010101u;
-                                topright = (uint8_t *)&tr;
-                            }
-                        } else
-                            topright = ptr + (4 << pixel_shift) - linesize;
-                    } else
-                        topright = NULL;
-
-                    h->hpc.pred4x4[dir](ptr, topright, linesize);
-                    nnz = sl->non_zero_count_cache[scan8[i + p * 16]];
-                    if (nnz) {
+                    if (nnz)
+                    {
                         if (nnz == 1 && dctcoef_get(sl->mb, pixel_shift, i * 16 + p * 256))
                             idct_dc_add(ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
                         else
@@ -701,20 +757,84 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
                 }
             }
         }
-    } else {
+        else
+        {
+            if (transform_bypass)
+            {
+                idct_dc_add =
+                    idct_add = h->h264dsp.h264_add_pixels4_clear;
+            }
+            else
+            {
+                idct_dc_add = h->h264dsp.h264_idct_dc_add;
+                idct_add = h->h264dsp.h264_idct_add;
+            }
+            for (i = 0; i < 16; i++)
+            {
+                uint8_t *const ptr = dest_y + block_offset[i];
+                const int dir = sl->intra4x4_pred_mode_cache[scan8[i]];
+
+                if (transform_bypass && h->ps.sps->profile_idc == 244 && dir <= 1)
+                {
+                    h->hpc.pred4x4_add[dir](ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
+                }
+                else
+                {
+                    uint8_t *topright;
+                    int nnz, tr;
+                    uint64_t tr_high;
+                    if (dir == DIAG_DOWN_LEFT_PRED || dir == VERT_LEFT_PRED)
+                    {
+                        const int topright_avail = (sl->topright_samples_available << i) & 0x8000;
+                        av_assert2(sl->mb_y || linesize <= block_offset[i]);
+                        if (!topright_avail)
+                        {
+                            if (pixel_shift)
+                            {
+                                tr_high = ((uint16_t *)ptr)[3 - linesize / 2] * 0x0001000100010001ULL;
+                                topright = (uint8_t *)&tr_high;
+                            }
+                            else
+                            {
+                                tr = ptr[3 - linesize] * 0x01010101u;
+                                topright = (uint8_t *)&tr;
+                            }
+                        }
+                        else
+                            topright = ptr + (4 << pixel_shift) - linesize;
+                    }
+                    else
+                        topright = NULL;
+
+                    h->hpc.pred4x4[dir](ptr, topright, linesize);
+                    nnz = sl->non_zero_count_cache[scan8[i + p * 16]];
+                    if (nnz)
+                    {
+                        if (nnz == 1 && dctcoef_get(sl->mb, pixel_shift, i * 16 + p * 256))
+                            idct_dc_add(ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
+                        else
+                            idct_add(ptr, sl->mb + (i * 16 + p * 256 << pixel_shift), linesize);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
         h->hpc.pred16x16[sl->intra16x16_pred_mode](dest_y, linesize);
-        if (sl->non_zero_count_cache[scan8[LUMA_DC_BLOCK_INDEX + p]]) {
+        if (sl->non_zero_count_cache[scan8[LUMA_DC_BLOCK_INDEX + p]])
+        {
             if (!transform_bypass)
                 h->h264dsp.h264_luma_dc_dequant_idct(sl->mb + (p * 256 << pixel_shift),
                                                      sl->mb_luma_dc[p],
                                                      h->ps.pps->dequant4_coeff[p][qscale][0]);
-            else {
+            else
+            {
                 static const uint8_t dc_mapping[16] = {
-                     0 * 16,  1 * 16,  4 * 16,  5 * 16,
-                     2 * 16,  3 * 16,  6 * 16,  7 * 16,
-                     8 * 16,  9 * 16, 12 * 16, 13 * 16,
-                    10 * 16, 11 * 16, 14 * 16, 15 * 16
-                };
+                    0 * 16, 1 * 16, 4 * 16, 5 * 16,
+                    2 * 16, 3 * 16, 6 * 16, 7 * 16,
+                    8 * 16, 9 * 16, 12 * 16, 13 * 16,
+                    10 * 16, 11 * 16, 14 * 16, 15 * 16};
                 for (i = 0; i < 16; i++)
                     dctcoef_set(sl->mb + (p * 256 << pixel_shift),
                                 pixel_shift, dc_mapping[i],
@@ -736,16 +856,22 @@ static av_always_inline void hl_decode_mb_idct_luma(const H264Context *h, H264Sl
     void (*idct_add)(uint8_t *dst, int16_t *block, int stride);
     int i;
     block_offset += 16 * p;
-    if (!IS_INTRA4x4(mb_type)) {
-        if (IS_INTRA16x16(mb_type)) {
-            if (transform_bypass) {
+    if (!IS_INTRA4x4(mb_type))
+    {
+        if (IS_INTRA16x16(mb_type))
+        {
+            if (transform_bypass)
+            {
                 if (h->ps.sps->profile_idc == 244 &&
                     (sl->intra16x16_pred_mode == VERT_PRED8x8 ||
-                     sl->intra16x16_pred_mode == HOR_PRED8x8)) {
+                     sl->intra16x16_pred_mode == HOR_PRED8x8))
+                {
                     h->hpc.pred16x16_add[sl->intra16x16_pred_mode](dest_y, block_offset,
                                                                    sl->mb + (p * 256 << pixel_shift),
                                                                    linesize);
-                } else {
+                }
+                else
+                {
                     for (i = 0; i < 16; i++)
                         if (sl->non_zero_count_cache[scan8[i + p * 16]] ||
                             dctcoef_get(sl->mb, pixel_shift, i * 16 + p * 256))
@@ -753,23 +879,30 @@ static av_always_inline void hl_decode_mb_idct_luma(const H264Context *h, H264Sl
                                                               sl->mb + (i * 16 + p * 256 << pixel_shift),
                                                               linesize);
                 }
-            } else {
+            }
+            else
+            {
                 h->h264dsp.h264_idct_add16intra(dest_y, block_offset,
                                                 sl->mb + (p * 256 << pixel_shift),
                                                 linesize,
                                                 sl->non_zero_count_cache + p * 5 * 8);
             }
-        } else if (sl->cbp & 15) {
-            if (transform_bypass) {
+        }
+        else if (sl->cbp & 15)
+        {
+            if (transform_bypass)
+            {
                 const int di = IS_8x8DCT(mb_type) ? 4 : 1;
                 idct_add = IS_8x8DCT(mb_type) ? h->h264dsp.h264_add_pixels8_clear
-                    : h->h264dsp.h264_add_pixels4_clear;
+                                              : h->h264dsp.h264_add_pixels4_clear;
                 for (i = 0; i < 16; i += di)
                     if (sl->non_zero_count_cache[scan8[i + p * 16]])
                         idct_add(dest_y + block_offset[i],
                                  sl->mb + (i * 16 + p * 256 << pixel_shift),
                                  linesize);
-            } else {
+            }
+            else
+            {
                 if (IS_8x8DCT(mb_type))
                     h->h264dsp.h264_idct8_add4(dest_y, block_offset,
                                                sl->mb + (p * 256 << pixel_shift),
@@ -785,34 +918,40 @@ static av_always_inline void hl_decode_mb_idct_luma(const H264Context *h, H264Sl
     }
 }
 
-#define BITS   8
+#define BITS 8
 #define SIMPLE 1
 #include "h264_mb_template.c"
 
-#undef  BITS
-#define BITS   16
+#undef BITS
+#define BITS 16
 #include "h264_mb_template.c"
 
-#undef  SIMPLE
+#undef SIMPLE
 #define SIMPLE 0
 #include "h264_mb_template.c"
 
 void ff_h264_hl_decode_mb(const H264Context *h, H264SliceContext *sl)
 {
-    const int mb_xy   = sl->mb_xy;
+    const int mb_xy = sl->mb_xy;
     const int mb_type = h->cur_pic.mb_type[mb_xy];
-    int is_complex    = CONFIG_SMALL || sl->is_complex ||
-                        IS_INTRA_PCM(mb_type) || sl->qscale == 0;
+    int is_complex = CONFIG_SMALL || sl->is_complex ||
+                     IS_INTRA_PCM(mb_type) || sl->qscale == 0;
 
-    if (CHROMA444(h)) {
+    if (CHROMA444(h))
+    {
         if (is_complex || h->pixel_shift)
             hl_decode_mb_444_complex(h, sl);
         else
             hl_decode_mb_444_simple_8(h, sl);
-    } else if (is_complex) {
+    }
+    else if (is_complex)
+    {
         hl_decode_mb_complex(h, sl);
-    } else if (h->pixel_shift) {
+    }
+    else if (h->pixel_shift)
+    {
         hl_decode_mb_simple_16(h, sl);
-    } else
+    }
+    else
         hl_decode_mb_simple_8(h, sl);
 }

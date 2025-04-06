@@ -3918,12 +3918,10 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 #if gly_ts
 
             if (avctx->internal->in_pkt->er_flag == 1 && sl->cabac.bytestream - sl->cabac.bytestream_start > avctx->internal->in_pkt->er_byte)
-
             {
 
                 eos = 1;
             }
-
 #endif
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
                 sl->cabac.bytestream > sl->cabac.bytestream_end + 2) // 处理字节流超出范围的错误
@@ -3970,7 +3968,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             if (eos || sl->mb_y >= h->mb_height) // 处理 Slice 结束
             {
                 ff_tlog(h->avctx, "slice end %d %d\n", get_bits_count(&sl->gb), sl->gb.size_in_bits);
-                printf("slice end cha=%d all1=%d all2=%d \n", sl->cabac.bytestream_end - sl->cabac.bytestream, sl->cabac.bytestream_end - sl->cabac.bytestream_start, sl->gb.size_in_bits);
+                // printf("slice end cha=%d all1=%d all2=%d \n", sl->cabac.bytestream_end - sl->cabac.bytestream, sl->cabac.bytestream_end - sl->cabac.bytestream_start, sl->gb.size_in_bits);
                 er_x = sl->mb_x;
                 er_y = sl->mb_y;
                 resync_mb_x = sl->resync_mb_x;
@@ -4097,7 +4095,7 @@ finish:
 
     int last_err_x = er_x;
     int last_err_y = er_y;
-
+    printf("er_flag:%d", er_flag);
     // 新增的错误边界检测逻辑（使用原有设计的两个函数）
     if (er_flag == 1 || er_flag == 2)
     {

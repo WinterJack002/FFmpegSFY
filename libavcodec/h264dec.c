@@ -1289,9 +1289,10 @@ static const AVOption h264_options[] = {
     {"enable_er", "Enable error resilience on damaged frames (unsafe)", OFFSET(enable_er), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VD},
     {"x264_build", "Assume this x264 version if no x264 version found in any SEI", OFFSET(x264_build), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, VD},
     {NULL},
-
+#if WINTER_AUTO_RENDERING
     {"enable_auto_rendering_flag", "Enable custom rendering decision", OFFSET(enable_auto_rendering_flag), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM},
     {NULL},
+#endif
 };
 
 static const AVClass h264_class = {

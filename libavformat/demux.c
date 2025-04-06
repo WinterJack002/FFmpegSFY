@@ -1303,6 +1303,14 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
         int64_t next_dts = pkt->dts;
         int len;
 
+#if gly_ts
+
+        if (s->ts_lose_flag == 1 && pkt->er_flag == 1)
+        {
+
+            goto fail;
+        }
+#endif
         len = av_parser_parse2(sti->parser, sti->avctx,
                                &out_pkt->data, &out_pkt->size, data, size, // h264_parse() 组帧
                                pkt->pts, pkt->dts, pkt->pos);
@@ -2808,6 +2816,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int eof_reached = 0;
     int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
 
+#if gly_ts
+    ic->ts_lose_flag = 0;
+#endif
+
     flush_codecs = probesize > 0;
 
     av_opt_set_int(ic, "skip_clear", 1, AV_OPT_SEARCH_CHILDREN);
@@ -3464,6 +3476,10 @@ find_stream_info_err:
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %" PRId64 " bytes read:%" PRId64 " seeks:%d frames:%d\n",
                avio_tell(ic->pb), ctx->bytes_read, ctx->seek_count, count);
     }
+#if gly_ts
+    ic->all_ts_pkt = 0;
+    ic->correct_ts_pkt = 0;
+#endif
     return ret;
 
 unref_then_goto_end:

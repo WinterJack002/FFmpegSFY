@@ -48,6 +48,15 @@
 #include "thread.h"
 #include "threadframe.h"
 
+#if WINTER_AUTO_RENDERING
+typedef struct CustomDecodeControl
+{
+    int enable_custom_check;
+    // float threshold;
+    // 你可以添加更多参数
+} CustomDecodeControl;
+#endif
+
 #if gly_ts
 
 typedef struct AVCodecInternal
@@ -3705,8 +3714,7 @@ static void find_error_boundary(const H264Context *h, H264SliceContext *sl,
         // 2.dct 系数错误检测（gly）
         int ret2 = test_residual(h->cur_pic.f->var, h, current_x, current_y);
 
-        // if (ret == -1 || ret2 == -1)
-        if (ret2 == -1)
+        if (ret == -1 || ret2 == -1)
         {
             *last_err_x = current_x;
             *last_err_y = current_y;
@@ -3745,6 +3753,8 @@ static float calculate_custom_diff_Y(H264Context *h, int mb_x, int mb_y)
 
     AVFrame *cur_f = cur_pic->f;
     AVFrame *ref_f = ref->parent->f;
+    if (!ref_f->data[0] || ref_f->linesize[0] <= 0)
+        return 0.0f; // 参考帧没有数据
     int width = cur_f->width;
     int height = cur_f->height;
 
@@ -3777,6 +3787,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     const H264Context *h = sl->h264;
 #if WINTER_AUTO_RENDERING
     H264Context *mod_h = (H264Context *)h; // 临时非 const 对象，为了修改自定义参数
+    CustomDecodeControl *ctrl = (CustomDecodeControl *)avctx->opaque;
 #endif
     // H264Context *h = sl->h264;
     int lf_x_start = sl->mb_x;
@@ -3939,10 +3950,10 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                 av_log(h->avctx, AV_LOG_DEBUG, "bytestream overread %" PTRDIFF_SPECIFIER "\n", sl->cabac.bytestream_end - sl->cabac.bytestream);
             if (ret < 0 || sl->cabac.bytestream > sl->cabac.bytestream_end + 4) // 处理解码失败或 bytestream 过度读取
             {
-                av_log(h->avctx, AV_LOG_ERROR,
-                       "error while decoding MB %d %d, bytestream %" PTRDIFF_SPECIFIER "\n",
-                       sl->mb_x, sl->mb_y,
-                       sl->cabac.bytestream_end - sl->cabac.bytestream);
+                // av_log(h->avctx, AV_LOG_ERROR,
+                //        "error while decoding MB %d %d, bytestream %" PTRDIFF_SPECIFIER "\n",
+                //        sl->mb_x, sl->mb_y,
+                //        sl->cabac.bytestream_end - sl->cabac.bytestream);
 
                 er_x = sl->mb_x;
                 er_y = sl->mb_y;
@@ -4103,6 +4114,7 @@ finish:
 
         // 使用独立设计的find_error_boundary函数
         find_error_boundary(h, sl, er_x, er_y, &last_err_x, &last_err_y);
+        printf("er_x = %d , er_y = %d , last_er_x = %d, last_er_y = %d , er_flag = %d\n", er_x, er_y, last_err_x, last_err_y, er_flag);
 #if WINTER_MV_FILES_PRINT
         // 记录到JSON文件
         if (h->custom_err_file && h->ffmpeg_err_file)
@@ -4125,8 +4137,7 @@ finish:
 #endif
 
 #if WINTER_AUTO_RENDERING
-        // if (h->enable_auto_rendering_flag)
-        if (1)
+        if (ctrl && ctrl->enable_custom_check)
         {
             int mb_height = h->mb_height;
             float cur_custom_diff_Y = 0.0f;
@@ -4154,7 +4165,7 @@ finish:
             else
             {
                 cur_custom_diff_Y = calculate_custom_diff_Y(h, last_err_x, last_err_y);
-                printf("帧间像素平均差异：%.3f, ", cur_custom_diff_Y);
+                printf("Average pixel difference between frames:%.3f, ", cur_custom_diff_Y);
                 if (cur_custom_diff_Y > threshold)
                     cur_render_flag = 0;
                 mod_h->prev_custom_diff_Y = cur_custom_diff_Y;
@@ -4164,7 +4175,10 @@ finish:
             // printf("cur_custom_diff_Y:%.3f ", cur_custom_diff_Y);
             printf("cur_render_flag:%d \n", cur_render_flag);
             if (!cur_render_flag && h->cur_pic_ptr && h->cur_pic_ptr->f)
+            {
                 h->cur_pic_ptr->f->flags |= AV_FRAME_FLAG_CUSTOM_NORENDER;
+                // printf("设置AVFrame->flags\n");
+            }
         }
 
 #endif

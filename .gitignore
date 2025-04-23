@@ -46,3 +46,5 @@ debug/
 shared/
 /libavformat/st7HMRPX
 /libavformat/stf9Cijd
+residual_data.txt
+variance.txt

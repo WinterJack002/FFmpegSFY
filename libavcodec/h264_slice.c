@@ -48,6 +48,8 @@
 #include "thread.h"
 #include "threadframe.h"
 
+#define GLY_DISABLE_B_FRAMES 1
+
 static const uint8_t field_scan[16 + 1] = {
     0 + 0 * 4,
     0 + 1 * 4,
@@ -1646,6 +1648,9 @@ static int h264_select_output_frame(H264Context *h)
             out = h->delayed_pic[i];
             out_idx = i;
         }
+#if GLY_DISABLE_B_FRAMES
+    h->avctx->has_b_frames = 0;
+#endif
     if (h->avctx->has_b_frames == 0 &&
         ((h->delayed_pic[0]->f->flags & AV_FRAME_FLAG_KEY) || h->delayed_pic[0]->mmco_reset))
         h->next_outputed_poc = INT_MIN;

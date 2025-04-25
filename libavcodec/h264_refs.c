@@ -36,6 +36,8 @@
 
 #include <assert.h>
 
+#define GLY_MMCO_DISABLED 1
+
 static void pic_as_field(H264Ref *pic, const int parity)
 {
     int i;
@@ -847,7 +849,11 @@ int ff_h264_decode_ref_pic_marking(H264SliceContext *sl, GetBitContext *gb,
         }
         sl->explicit_ref_marking = 1;
     } else {
+#if GLY_MMCO_DISABLED
+        sl->explicit_ref_marking = 0;
+#else
         sl->explicit_ref_marking = get_bits1(gb);
+#endif
         if (sl->explicit_ref_marking) {
             for (i = 0; i < FF_ARRAY_ELEMS(sl->mmco); i++) {
                 MMCOOpcode opcode = get_ue_golomb_31(gb);

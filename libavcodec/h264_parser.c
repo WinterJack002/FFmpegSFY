@@ -50,6 +50,7 @@
 #include "refstruct.h"
 #include "startcode.h"
 
+#define GLY_MMCO_DISABLED 1
 typedef struct H264ParseContext {
     ParseContext pc;
     H264ParamSets ps;
@@ -219,19 +220,42 @@ static int scan_mmco_reset(AVCodecParserContext *s, GetBitContext *gb,
         (p->ps.pps->weighted_bipred_idc == 1 && slice_type_nos == AV_PICTURE_TYPE_B))
         ff_h264_pred_weight_table(gb, p->ps.sps, ref_count, slice_type_nos,
                                   &pwt, p->picture_structure, logctx);
+#if GLY_MMCO_DISABLED
+    // if (get_bits1(gb)) { // adaptive_ref_pic_marking_mode_flag
+    //     int i;
+    //     for (i = 0; i < H264_MAX_MMCO_COUNT; i++) {
+    //         MMCOOpcode opcode = get_ue_golomb_31(gb);
+    //         if (opcode > (unsigned) MMCO_LONG) {
+    //             av_log(logctx, AV_LOG_ERROR,
+    //                    "illegal memory management control operation %d\n",
+    //                    opcode);
+    //             return AVERROR_INVALIDDATA;
+    //         }
+    //         if (opcode == MMCO_END)
+    //            return 0;
+    //         else if (opcode == MMCO_RESET)
+    //             return 1;
 
+    //         if (opcode == MMCO_SHORT2UNUSED || opcode == MMCO_SHORT2LONG)
+    //             get_ue_golomb_long(gb); // difference_of_pic_nums_minus1
+    //         if (opcode == MMCO_SHORT2LONG || opcode == MMCO_LONG2UNUSED ||
+    //             opcode == MMCO_LONG || opcode == MMCO_SET_MAX_LONG)
+    //             get_ue_golomb_31(gb);
+    //     }
+    // }
+#else
     if (get_bits1(gb)) { // adaptive_ref_pic_marking_mode_flag
         int i;
         for (i = 0; i < H264_MAX_MMCO_COUNT; i++) {
             MMCOOpcode opcode = get_ue_golomb_31(gb);
             if (opcode > (unsigned) MMCO_LONG) {
                 av_log(logctx, AV_LOG_ERROR,
-                       "illegal memory management control operation %d\n",
-                       opcode);
+                    "illegal memory management control operation %d\n",
+                    opcode);
                 return AVERROR_INVALIDDATA;
             }
             if (opcode == MMCO_END)
-               return 0;
+            return 0;
             else if (opcode == MMCO_RESET)
                 return 1;
 
@@ -242,6 +266,7 @@ static int scan_mmco_reset(AVCodecParserContext *s, GetBitContext *gb,
                 get_ue_golomb_31(gb);
         }
     }
+#endif
 
     return 0;
 }

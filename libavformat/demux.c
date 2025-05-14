@@ -1151,6 +1151,12 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
         int64_t next_dts = pkt->dts;
         int len;
 
+        #if gly_ts
+        if(s->ts_lose_flag == 1  && pkt->er_flag == 1){
+            goto fail;
+        }
+        #endif
+
         len = av_parser_parse2(sti->parser, sti->avctx,
                                &out_pkt->data, &out_pkt->size, data, size,
                                pkt->pts, pkt->dts, pkt->pos);
@@ -1212,7 +1218,14 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
         out_pkt->dts          = sti->parser->dts;
         out_pkt->pos          = sti->parser->pos;
         out_pkt->flags       |= pkt->flags & (AV_PKT_FLAG_DISCARD | AV_PKT_FLAG_CORRUPT);
-
+        #if gly_ts
+        out_pkt->er_flag = pkt->er_flag;
+        out_pkt->ts_correct = s->ts_correct;
+        if(pkt->er_flag == 0){
+            pkt->er_byte = -1;
+        }
+        out_pkt->er_byte = pkt->er_byte;
+        #endif
         if (sti->need_parsing == AVSTREAM_PARSE_FULL_RAW)
             out_pkt->pos = sti->parser->frame_offset;
 
@@ -1466,6 +1479,11 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt)
     int eof = 0;
     int ret;
     AVStream *st;
+    if(s->all_ts_pkt != 0){
+        s->ts_correct = (float)(s->correct_ts_pkt - s->pre_correct_ts_pkt) * 5.0 / (s->all_ts_pkt - s->pre_all_ts_pkt);
+    }else{
+        s->ts_correct = 5.0;
+    }
 
     if (!genpts) {
         ret = si->packet_buffer.head
@@ -2449,7 +2467,9 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int64_t probesize = ic->probesize;
     int eof_reached = 0;
     int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
-
+    #if gly_ts
+    ic->ts_lose_flag = 0;
+    #endif
     flush_codecs = probesize > 0;
 
     av_opt_set_int(ic, "skip_clear", 1, AV_OPT_SEARCH_CHILDREN);

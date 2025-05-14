@@ -583,7 +583,9 @@ int ff_h264_decode_ref_pic_marking(H264SliceContext *sl, GetBitContext *gb,
 
 void ff_h264_hl_decode_mb(const H264Context *h, H264SliceContext *sl);
 void ff_h264_decode_init_vlc(void);
-
+#if gly_display
+double calc_laplacian_variance(AVFrame *frame);
+#endif
 /**
  * Decode a macroblock
  * @return 0 if OK, ER_AC_ERROR / ER_DC_ERROR / ER_MV_ERROR on error

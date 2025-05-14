@@ -41,3 +41,8 @@
 /src
 /mapfile
 /tools/python/__pycache__/
+.vscode/
+debug/
+shared/
+/libavformat/st7HMRPX
+/libavformat/stf9Cijd
